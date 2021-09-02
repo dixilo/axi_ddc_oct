@@ -26,7 +26,9 @@ set dds_out_width 14
 set adc_width 12
 set mult_out_width 26
 set adder_out_width 27
-
+set adder_1st_width 28
+set adder_2nd_width 29
+set adder_3rd_width 30
 
 ################################################ IP generation
 ############### DDC QUAD
@@ -90,56 +92,72 @@ set_property generate_synth_checkpoint 0 [get_files adder_phase_oct.xci]
 
 #### 1st stage adder
 create_ip -vlnv [latest_ip c_addsub] -module_name adder_1st_oct
-set_property CONFIG.A_Width 29 [get_ips adder_1st_dd2]
-set_property CONFIG.B_Width 29 [get_ips adder_1st_dd2]
-set_property CONFIG.Out_Width 30 [get_ips adder_1st_dd2]
-set_property CONFIG.CE "false" [get_ips adder_1st_dd2]
-set_property CONFIG.Latency 3 [get_ips adder_1st_dd2]
-set_property generate_synth_checkpoint 0 [get_files adder_1st_dd2.xci]
+set adder_1st_oct [get_ips adder_1st_oct]
+set_property CONFIG.A_Width $adder_out_width $adder_1st_oct
+set_property CONFIG.B_Width $adder_out_width $adder_1st_oct
+set_property CONFIG.Out_Width $adder_1st_width $adder_1st_oct
+set_property CONFIG.CE "false" $adder_1st_oct
+set_property CONFIG.Latency 3 $adder_1st_oct
+set_property generate_synth_checkpoint 0 [get_files adder_1st_oct.xci]
 
 #### 2nd stage adder
-create_ip -vlnv [latest_ip c_addsub] -module_name adder_2nd_dd2
-set_property CONFIG.A_Width 30 [get_ips adder_2nd_dd2]
-set_property CONFIG.B_Width 30 [get_ips adder_2nd_dd2]
-set_property CONFIG.Out_Width 31 [get_ips adder_2nd_dd2]
-set_property CONFIG.CE "false" [get_ips adder_2nd_dd2]
-set_property CONFIG.Latency 3 [get_ips adder_2nd_dd2]
-set_property generate_synth_checkpoint 0 [get_files adder_2nd_dd2.xci]
+create_ip -vlnv [latest_ip c_addsub] -module_name adder_2nd_oct
+set adder_2nd_oct [get_ips adder_2nd_oct]
+set_property CONFIG.A_Width $adder_1st_width $adder_2nd_oct
+set_property CONFIG.B_Width $adder_1st_width $adder_2nd_oct
+set_property CONFIG.Out_Width $adder_2nd_width $adder_2nd_oct
+set_property CONFIG.CE "false" $adder_2nd_oct
+set_property CONFIG.Latency 3 $adder_2nd_oct
+set_property generate_synth_checkpoint 0 [get_files adder_2nd_oct.xci]
+
+#### 3rd stage adder
+create_ip -vlnv [latest_ip c_addsub] -module_name adder_3rd_oct
+set adder_3rd_oct [get_ips adder_3rd_oct]
+set_property CONFIG.A_Width $adder_2nd_width $adder_3rd_oct
+set_property CONFIG.B_Width $adder_2nd_width $adder_3rd_oct
+set_property CONFIG.Out_Width $adder_3rd_width $adder_3rd_oct
+set_property CONFIG.CE "false" $adder_3rd_oct
+set_property CONFIG.Latency 3 $adder_3rd_oct
+set_property generate_synth_checkpoint 0 [get_files adder_3rd_oct.xci]
+
 
 ############### Accumulator
 ### Accumulator
-create_ip -vlnv [latest_ip c_accum] -module_name c_accum_dd2
-set_property CONFIG.Implementation {DSP48} [get_ips c_accum_dd2]
-set_property CONFIG.Input_Width {31} [get_ips c_accum_dd2]
-set_property CONFIG.Output_Width {48} [get_ips c_accum_dd2]
-set_property CONFIG.Latency_Configuration {Manual} [get_ips c_accum_dd2]
-set_property CONFIG.Latency {2} [get_ips c_accum_dd2]
-set_property CONFIG.SCLR {false} [get_ips c_accum_dd2]
-set_property CONFIG.Bypass {true} [get_ips c_accum_dd2]
-set_property generate_synth_checkpoint 0 [get_files c_accum_dd2.xci]
+create_ip -vlnv [latest_ip c_accum] -module_name c_accum_oct
+set c_accum_oct [get_ips c_accum_oct]
+set_property CONFIG.Implementation {DSP48}         $c_accum_oct
+set_property CONFIG.Input_Width {30}               $c_accum_oct
+set_property CONFIG.Output_Width {48}              $c_accum_oct
+set_property CONFIG.Latency_Configuration {Manual} $c_accum_oct
+set_property CONFIG.Latency {2}                    $c_accum_oct
+set_property CONFIG.SCLR {false}                   $c_accum_oct
+
+set_property generate_synth_checkpoint 0 [get_files c_accum_oct.xci]
 
 ################################################ Register XCI files
 # file groups
-ipx::add_file ./axi_ddc_daq2.srcs/sources_1/ip/dds_dd2/dds_dd2.xci \
+ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/dds_dd2/dds_oct.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_daq2.srcs/sources_1/ip/multiplier_dd2/multiplier_dd2.xci \
+ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/multiplier_oct/multiplier_oct.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_daq2.srcs/sources_1/ip/adder_dd2/adder_dd2.xci \
+ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_oct/adder_oct.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_daq2.srcs/sources_1/ip/subtracter_dd2/subtracter_dd2.xci \
+ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/subtracter_oct/subtracter_oct.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_daq2.srcs/sources_1/ip/adder_phase_dd2/adder_phase_dd2.xci \
+ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_phase_oct/adder_phase_oct.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_daq2.srcs/sources_1/ip/adder_1st_dd2/adder_1st_dd2.xci \
+ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_1st_oct/adder_1st_oct.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_daq2.srcs/sources_1/ip/adder_2nd_dd2/adder_2nd_dd2.xci \
+ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_2nd_oct/adder_2nd_oct.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_daq2.srcs/sources_1/ip/c_accum_dd2/c_accum_dd2.xci \
+ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_3rd_oct/adder_3rd_oct.xci \
+[ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
+ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/c_accum_oct/c_accum_oct.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
 
 # Reordering
-ipx::reorder_files -after ./axi_ddc_daq2.srcs/sources_1/ip/c_accum_dd2/c_accum_dd2.xci ../axi_ddc_daq2.v [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::reorder_files -after ../ddc_quad.v ../axi_ddc_daq2_core.v [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
+ipx::reorder_files -after ./axi_ddc_oct.srcs/sources_1/ip/c_accum_oct/c_accum_oct.xci ../axi_ddc_oct.v [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
+ipx::reorder_files -after ../ddc_oct.v ../axi_ddc_oct_core.v [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
 
 # Interface
 ipx::infer_bus_interface dev_clk xilinx.com:signal:clock_rtl:1.0 [ipx::current_core]

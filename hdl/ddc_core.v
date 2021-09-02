@@ -1,19 +1,20 @@
 `timescale 1 ns / 1 ps
 
 module ddc_core(
-    input clk,
+    input wire        s_axis_aclk,
+    input wire [31:0] s_axis_tdata, // [31:16] Q, [15:0] I
+    input wire        s_axis_tvalid,
+    output wire       s_axis_tready,
 
-    // assuming [31:16] Q, [15:0] I
-    input [31:0] data_in,
-    input valid_in,
-    input [64:0] phase_in,
+    input [64:0]      s_axis_
     input resync,
 
     output valid_out,
     output [63:0] ddc_out
 );
 
-    localparam LATENCY = 14;
+    localparam DDS_RES = 14;
+    localparam LATENCY = 6;
 
     wire dds_valid;
     wire [31:0] dds_out;
