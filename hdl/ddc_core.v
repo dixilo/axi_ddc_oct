@@ -134,5 +134,6 @@ module ddc_core(
         .s(out_q)
     );
 
+    assign s_axis_tready = 1'b1;
 
 endmodule
