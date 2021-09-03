@@ -1,18 +1,21 @@
 `timescale 1 ns / 1 ps
 
-module ddc_quad(
-    input clk,
+module ddc_oct(
+    input wire s_axis_aclk,
 
-    // assuming [29:16] Q, [13:0] I
-    input [31:0] data_in_0,
-    input [31:0] data_in_1,
-    input [31:0] data_in_2,
-    input [31:0] data_in_3,
+    // ADC I, 8 lanes x (12 + 4(pad)) bits
+    input wire [127:0] s_axis_i_tdata,
+    output wire        s_axis_i_tready,
+    input wire         s_axis_i_tvalid,
 
-    input [19:0] pinc,
-    input [19:0] poff,
-    input p_valid,
-    input resync,
+    // ADC Q, 8 lanes x (12 + 4(pad)) bits
+    input wire [127:0] s_axis_q_tdata,
+    output wire        s_axis_q_tready,
+    input wire         s_axis_q_tvalid,
+
+    input wire [63:0]  s_axis_phase_tdata,
+    input wire         s_axis_phase_tvalid,
+    input wire         resync,
 
     output valid_out,
     output [63:0] data_out

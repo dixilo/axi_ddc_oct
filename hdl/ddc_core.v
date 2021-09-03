@@ -1,115 +1,138 @@
 `timescale 1 ns / 1 ps
 
 module ddc_core(
+    // ADC input
     input wire        s_axis_aclk,
-    input wire [31:0] s_axis_tdata, // [31:16] Q, [15:0] I
+    input wire [31:0] s_axis_tdata, // [26:16] Q, [11:0] I
     input wire        s_axis_tvalid,
     output wire       s_axis_tready,
 
-    input [64:0]      s_axis_
-    input resync,
+    // Phase input
+    input wire [63:0] s_axis_phase_tdata,
+    input wire        s_axis_phase_tvalid,
 
-    output valid_out,
-    output [63:0] ddc_out
+    // DDS output
+    output wire [31:0] m_axis_dds_tdata, // [29:16] Q, [13:0] I
+    output wire        m_axis_dds_tvalid,
+
+    // DDC output
+    output wire [63:0] m_axis_ddc_tdata, // [58:32] Q, [26:0] I
+    output wire        m_axis_ddc_tvalid,
+
+    input wire resync
 );
 
     localparam DDS_RES = 14;
-    localparam LATENCY = 6;
+    localparam ADC_RES = 12;
+    localparam MUL_RES = 26;
+    localparam DDC_PAD = 32 - MUL_RES;
+
+    localparam DDC_LATENCY = 6;
+    localparam DDS_LATENCY = 8;
 
     wire dds_valid;
     wire [31:0] dds_out;
 
     // Convention
-    wire [15:0] cos_dds;
-    wire [15:0] sin_dds;
-    wire [15:0] cos_data;
-    wire [15:0] sin_data;
+    wire [DDS_RES-1:0] cos_dds;
+    wire [DDS_RES-1:0] sin_dds;
+    wire [ADC_RES-1:0] cos_data;
+    wire [ADC_RES-1:0] sin_data;
 
     // Result of multiplication
-    wire [27:0] coscos;
-    wire [27:0] cossin;
-    wire [27:0] sincos;
-    wire [27:0] sinsin;
+    wire [MUL_RES-1:0] coscos;
+    wire [MUL_RES-1:0] cossin;
+    wire [MUL_RES-1:0] sincos;
+    wire [MUL_RES-1:0] sinsin;
 
     // Result of sum
-    wire [28:0] out_i;
-    wire [28:0] out_q;
+    wire [MUL_RES:0] out_i;
+    wire [MUL_RES:0] out_q;
     
     // Valid buffering
-    reg [LATENCY-1:0] valid_buf = 0;
+    reg [DDS_LATENCY-1:0] dds_valid_buf = 0;
+    reg [DDC_LATENCY-1:0] ddc_valid_buf = 0;
     reg p_conf = 0;
 
-    assign cos_dds = dds_out[15:0];
-    assign sin_dds = dds_out[29:16];
-    assign cos_data = data_in[13:0];
-    assign sin_data = data_in[29:16];
+    assign cos_dds = dds_out[DDS_RES-1:0];
+    assign sin_dds = dds_out[DDS_RES+15:16];
+    assign cos_data = data_in[ADC_RES-1:0];
+    assign sin_data = data_in[ADC_RES+15:16];
 
-    assign ddc_out = {{3{out_q[28]}}, out_q, {3{out_i[28]}}, out_i};
+    assign m_axis_ddc_tdata = {{(DDC_PAD){out_q[MUL_RES]}}, out_q, {(DDC_PAD){out_i[MUL_RES]}}, out_i};
 
-    dds_dd2 dds_inst(
+    dds_oct dds_inst(
         .aclk(clk),
-        .s_axis_phase_tvalid(valid_in),
-        .s_axis_phase_tdata({resync, phase_in}), // pinc [19:0], poff [43:24], 48 bit width
+        .s_axis_phase_tvalid(s_axis_phase_tvalid),
+        .s_axis_phase_tdata({resync, phase_in}), // resync, poff [63:32], pinc [31:0], 65 bit
         .m_axis_data_tvalid(dds_valid),
         .m_axis_data_tdata(dds_out) // cos [13:0], sin [29:16], 32 bit width
     );
 
     // Phase configured
-    always @(posedge clk) begin
-        if (valid_in)
+    always @(posedge s_axis_aclk) begin
+        if (s_axis_phase_tvalid)
             p_conf <= 1;
         else
             p_conf <= p_conf;
     end
-    
-    // Valid generation
-    always @(posedge clk) begin
-        valid_buf <= {valid_buf[LATENCY-2:0], p_conf};
-    end
-    assign valid_out = valid_buf[LATENCY-1];
 
-    // Multiplier 14 x 14 -> 28
-    multiplier_dd2 coscos_mult(
-        .clk(clk),
+    // DDS valid generation
+    always @(posedge s_axis_aclk) begin
+        dds_valid_buf <= {dds_valid_buf[DDS_LATENCY-2:0], p_conf};
+    end
+    assign m_axis_dds_tvalid = dds_valid_buf[DDS_LATENCY-1];
+
+    // DDC valid generation
+    always @(posedge s_axis_aclk) begin
+        ddc_valid_buf[DDC_LATENCY-1:2] <= ddc_valid_buf[DDC_LATENCY-2:1];
+        ddc_valid_buf[0] <= s_axis_tvalid & m_axis_dds_tvalid;
+    end
+    assign m_axis_ddc_tvalid = ddc_valid_buf[DDC_LATENCY-1];
+
+    // Multiplier 12 x 14 -> 26
+    multiplier_oct coscos_mult(
+        .clk(s_axis_aclk),
         .a(cos_data),
         .b(cos_dds),
         .p(coscos)
     );
 
-    multiplier_dd2 cossin_mult(
-        .clk(clk),
+    multiplier_oct cossin_mult(
+        .clk(s_axis_aclk),
         .a(cos_data),
         .b(sin_dds),
         .p(cossin)
     );
 
-    multiplier_dd2 sincos_mult(
-        .clk(clk),
+    multiplier_oct sincos_mult(
+        .clk(s_axis_aclk),
         .a(sin_data),
         .b(cos_dds),
         .p(sincos)
     );
 
-    multiplier_dd2 sinsin_mult(
-        .clk(clk),
+    multiplier_oct sinsin_mult(
+        .clk(s_axis_aclk),
         .a(sin_data),
         .b(sin_dds),
         .p(sinsin)
     );
 
-    // Adder 28 + 28 -> 29
-    adder_dd2 sum_i(
-        .clk(clk),
+    // Adder 26 + 26 -> 27
+    adder_oct sum_i(
+        .clk(s_axis_aclk),
         .a(coscos),
         .b(sinsin),
         .s(out_i)
     );
 
-    subtracter_dd2 sub_q(
-        .clk(clk),
+    subtractor_oct sub_q(
+        .clk(s_axis_aclk),
         .a(sincos),
         .b(cossin),
         .s(out_q)
     );
+
 
 endmodule
