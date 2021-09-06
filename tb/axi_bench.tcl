@@ -10,13 +10,13 @@ set project_name "axi_bench"
 create_project -force $project_name ./${project_name} -part $p_device
 set_property board_part $p_board [current_project]
 
-set_property  ip_repo_paths  "./test_ip" [current_project]
+set_property  ip_repo_paths  "../" [current_project]
 
 ## create board design
 create_bd_design "system"
 
 ### DDC_DAQ2
-create_bd_cell -type ip -vlnv [latest_ip axi_ddc_daq2] axi_ddc_daq2
+create_bd_cell -type ip -vlnv [latest_ip axi_ddc_oct] axi_ddc_oct
 
 ### AXI VIP
 create_bd_cell -type ip -vlnv [latest_ip axi_vip] axi_vip
@@ -26,74 +26,88 @@ set_property CONFIG.INTERFACE_MODE {MASTER} [get_bd_cells axi_vip]
 create_bd_cell -type ip -vlnv [latest_ip axi_interconnect] axi_interconnect
 set_property CONFIG.NUM_MI {1} [get_bd_cells axi_interconnect]
 
-### XFFT (test)
-create_bd_cell -type ip -vlnv [latest_ip xfft] xfft_0
-set_property -dict [list CONFIG.target_data_throughput {250} CONFIG.input_width {14} CONFIG.scaling_options {unscaled} CONFIG.rounding_modes {convergent_rounding} CONFIG.xk_index {true} CONFIG.number_of_stages_using_block_ram_for_data_and_phase_factors {3}] [get_bd_cells xfft_0]
-
 
 ## Connection
 ### Port definition
 #### Clock and reset
 create_bd_port -dir I -type clk axi_clk
 set_property CONFIG.FREQ_HZ 50000000 [get_bd_ports axi_clk]
-create_bd_port -dir I -type clk dev_clk
-set_property CONFIG.FREQ_HZ 250000000 [get_bd_ports dev_clk]
+create_bd_port -dir I -type clk s_axis_aclk
+set_property CONFIG.FREQ_HZ 256000000 [get_bd_ports s_axis_aclk]
 
 create_bd_port -dir I -type rst axi_aresetn
-create_bd_port -dir I -type rst dev_rst
-set_property CONFIG.POLARITY ACTIVE_HIGH [get_bd_ports dev_rst]
+create_bd_port -dir I -type rst s_axis_aresetn
 
 #### Data
-create_bd_port -dir I -from 31 -to 0 -type data data_in_0
-create_bd_port -dir I -from 31 -to 0 -type data data_in_1
-create_bd_port -dir I -from 31 -to 0 -type data data_in_2
-create_bd_port -dir I -from 31 -to 0 -type data data_in_3
+# Input
+create_bd_port -dir I -from 127 -to 0 -type data s_axis_i_tdata
+create_bd_port -dir I -from 127 -to 0 -type data s_axis_q_tdata
+create_bd_port -dir O -type data s_axis_i_tready
+create_bd_port -dir O -type data s_axis_q_tready
+create_bd_port -dir I -type data s_axis_i_tvalid
+create_bd_port -dir I -type data s_axis_q_tvalid
+
 create_bd_port -dir I resync
 
-create_bd_port -dir O -from 95 -to 0 -type data data_out
-create_bd_port -dir O valid_out
+# Output DDS
+create_bd_port -dir O -from 127 -to 0 -type data m_axis_ddsi_tdata
+create_bd_port -dir O -from 127 -to 0 -type data m_axis_ddsq_tdata
+create_bd_port -dir I -type data m_axis_ddsi_tready
+create_bd_port -dir I -type data m_axis_ddsq_tready
+create_bd_port -dir O -type data m_axis_ddsi_tvalid
+create_bd_port -dir O -type data m_axis_ddsq_tvalid
+
+# Output DDC
+
+create_bd_port -dir O -from 95 -to 0 -type data m_axis_ddc_tdata
+create_bd_port -dir I m_axis_ddc_tready
+create_bd_port -dir O m_axis_ddc_tvalid
 
 
 ### AXI intf
 connect_bd_intf_net [get_bd_intf_pins axi_vip/M_AXI] -boundary_type upper [get_bd_intf_pins axi_interconnect/S00_AXI]
-connect_bd_intf_net [get_bd_intf_pins axi_ddc_daq2/s00_axi] -boundary_type upper [get_bd_intf_pins axi_interconnect/M00_AXI]
+connect_bd_intf_net [get_bd_intf_pins axi_ddc_oct/s00_axi] -boundary_type upper [get_bd_intf_pins axi_interconnect/M00_AXI]
 
 ### AXI Clock
 connect_bd_net [get_bd_ports axi_clk] [get_bd_pins axi_vip/aclk]
 connect_bd_net [get_bd_ports axi_clk] [get_bd_pins axi_interconnect/ACLK]
 connect_bd_net [get_bd_ports axi_clk] [get_bd_pins axi_interconnect/S00_ACLK]
 connect_bd_net [get_bd_ports axi_clk] [get_bd_pins axi_interconnect/M00_ACLK]
-connect_bd_net [get_bd_ports axi_clk] [get_bd_pins axi_ddc_daq2/s00_axi_aclk]
+connect_bd_net [get_bd_ports axi_clk] [get_bd_pins axi_ddc_oct/s00_axi_aclk]
 
 ### Device clk
-connect_bd_net [get_bd_ports dev_clk] [get_bd_pins axi_ddc_daq2/dev_clk]
+connect_bd_net [get_bd_ports s_axis_aclk] [get_bd_pins axi_ddc_oct/s_axis_aclk]
 
 ### AXI aresetn
 connect_bd_net [get_bd_ports axi_aresetn] [get_bd_pins axi_vip/aresetn]
 connect_bd_net [get_bd_ports axi_aresetn] [get_bd_pins axi_interconnect/ARESETN]
 connect_bd_net [get_bd_ports axi_aresetn] [get_bd_pins axi_interconnect/M00_ARESETN]
 connect_bd_net [get_bd_ports axi_aresetn] [get_bd_pins axi_interconnect/S00_ARESETN]
-connect_bd_net [get_bd_ports axi_aresetn] [get_bd_pins axi_ddc_daq2/s00_axi_aresetn]
+connect_bd_net [get_bd_ports axi_aresetn] [get_bd_pins axi_ddc_oct/s00_axi_aresetn]
 
 ### dev rst
-connect_bd_net [get_bd_ports dev_rst] [get_bd_pins axi_ddc_daq2/dev_rst]
+connect_bd_net [get_bd_ports s_axis_aresetn] [get_bd_pins axi_ddc_oct/s_axis_aresetn]
 
 ### Data
-connect_bd_net [get_bd_ports data_in_0] [get_bd_pins axi_ddc_daq2/data_in_0]
-connect_bd_net [get_bd_ports data_in_1] [get_bd_pins axi_ddc_daq2/data_in_1]
-connect_bd_net [get_bd_ports data_in_2] [get_bd_pins axi_ddc_daq2/data_in_2]
-connect_bd_net [get_bd_ports data_in_3] [get_bd_pins axi_ddc_daq2/data_in_3]
+connect_bd_net [get_bd_ports s_axis_i_tdata] [get_bd_pins axi_ddc_oct/s_axis_i_tdata]
+connect_bd_net [get_bd_ports s_axis_q_tdata] [get_bd_pins axi_ddc_oct/s_axis_q_tdata]
+connect_bd_net [get_bd_ports s_axis_i_tready] [get_bd_pins axi_ddc_oct/s_axis_i_tready]
+connect_bd_net [get_bd_ports s_axis_q_tready] [get_bd_pins axi_ddc_oct/s_axis_q_tready]
+connect_bd_net [get_bd_ports s_axis_i_tvalid] [get_bd_pins axi_ddc_oct/s_axis_i_tvalid]
+connect_bd_net [get_bd_ports s_axis_q_tvalid] [get_bd_pins axi_ddc_oct/s_axis_q_tvalid]
 
-connect_bd_net [get_bd_ports data_out] [get_bd_pins axi_ddc_daq2/data_out]
-connect_bd_net [get_bd_ports valid_out] [get_bd_pins axi_ddc_daq2/valid_out]
-connect_bd_net [get_bd_ports resync] [get_bd_pins axi_ddc_daq2/resync]
+connect_bd_net [get_bd_ports m_axis_ddsi_tdata] [get_bd_pins axi_ddc_oct/m_axis_ddsi_tdata]
+connect_bd_net [get_bd_ports m_axis_ddsq_tdata] [get_bd_pins axi_ddc_oct/m_axis_ddsq_tdata]
+connect_bd_net [get_bd_ports m_axis_ddsi_tready] [get_bd_pins axi_ddc_oct/m_axis_ddsi_tready]
+connect_bd_net [get_bd_ports m_axis_ddsq_tready] [get_bd_pins axi_ddc_oct/m_axis_ddsq_tready]
+connect_bd_net [get_bd_ports m_axis_ddsi_tvalid] [get_bd_pins axi_ddc_oct/m_axis_ddsi_tvalid]
+connect_bd_net [get_bd_ports m_axis_ddsq_tvalid] [get_bd_pins axi_ddc_oct/m_axis_ddsq_tvalid]
 
-### FFT (test)
-connect_bd_net [get_bd_ports dev_clk] [get_bd_pins xfft_0/aclk]
-make_bd_intf_pins_external  [get_bd_intf_pins xfft_0/S_AXIS_CONFIG]
-make_bd_intf_pins_external  [get_bd_intf_pins xfft_0/S_AXIS_DATA]
-make_bd_intf_pins_external  [get_bd_intf_pins xfft_0/M_AXIS_DATA]
+connect_bd_net [get_bd_ports m_axis_ddc_tdata] [get_bd_pins axi_ddc_oct/m_axis_ddc_tdata]
+connect_bd_net [get_bd_ports m_axis_ddc_tready] [get_bd_pins axi_ddc_oct/m_axis_ddc_tready]
+connect_bd_net [get_bd_ports m_axis_ddc_tvalid] [get_bd_pins axi_ddc_oct/m_axis_ddc_tvalid]
 
+connect_bd_net [get_bd_ports resync] [get_bd_pins axi_ddc_oct/resync]
 
 ## Project
 save_bd_design

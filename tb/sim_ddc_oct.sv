@@ -1,45 +1,48 @@
 `timescale 1ns / 1ps
 
-module sim_ddc_quad(
+module sim_ddc_oct(
     );
     
     parameter STEP_SYS = 40;
     parameter SIM_LENGTH = 65536;
 
     // input
-    logic valid_in;
-    logic clk;
-    logic [31:0] data_in_0;
-    logic [31:0] data_in_1;
-    logic [31:0] data_in_2;
-    logic [31:0] data_in_3;
-    logic p_valid;
-    assign p_valid = valid_in;
+    logic [127:0] s_axis_i_tdata;
+    logic         s_axis_i_tready;
+    logic         s_axis_i_valid;
+    logic [127:0] s_axis_q_tdata;
+    logic         s_axis_q_tready;
+    logic         s_axis_q_valid;
 
-    // Output
-    logic valid_out;
-    logic [63:0] data_out;
+    logic [63:0]  s_axis_phase_tdata;
+    logic         s_axis_phase_tvalid;
+    logic         resync;
 
-    // Feed to DDS compiler
-    logic [19:0] pinc;
-    logic [19:0] poff;
+    logic [127:0] m_axis_ddsi_tdata;
+    logic         m_axis_ddsi_tvalid;
+    logic         m_axis_ddsi_tready;
+
+    logic [127:0] m_axis_ddsq_tdata;
+    logic         m_axis_ddsq_tvalid;
+    logic         m_axis_ddsq_tready;
+
+    logic [63:0]  m_axis_ddc_tdata;
+    logic         m_axis_ddc_tvalid;
+    logic         m_axis_ddc_tready;
 
     // Control data
     logic din_on;
     logic din_fin;
     logic write_on;
 
-    // write output
-    integer fd_din_0;
-    integer fd_din_1;
-    integer fd_din_2;
-    integer fd_din_3;
-
+    // File descriptors
+    integer fd_din_i;
+    integer fd_din_q;
     integer fd_dout;
+
     logic write_ready = 0;
     logic [$clog2(SIM_LENGTH)-1:0] counter = 0;
     logic finish = 0;
-    logic resync = 0;
 
     // read setting
     integer fd_p;
@@ -47,13 +50,12 @@ module sim_ddc_quad(
     ddc_quad dut(.*);
 
     task clk_gen();
-        clk = 0;
+        s_axis_aclk = 0;
         forever #(STEP_SYS/2) clk = ~clk;
     endtask
     
     task rst_gen();
-        pinc = 0;
-        poff = 0;
+        s_axis_phase_tdata = 0;
         din_on = 0;
         din_fin = 0;
         valid_in = 0;
@@ -61,14 +63,12 @@ module sim_ddc_quad(
     endtask
     
     task file_open();
-        fd_din_0 = $fopen("./data_in_0.bin", "r");
-        fd_din_1 = $fopen("./data_in_1.bin", "r");
-        fd_din_2 = $fopen("./data_in_2.bin", "r");
-        fd_din_3 = $fopen("./data_in_3.bin", "r");
+        fd_din_i = $fopen("./data_in_i.bin", "r");
+        fd_din_q = $fopen("./data_in_q.bin", "r");
 
         fd_dout = $fopen("./data_out.bin", "w");
 
-        if ((fd_din_3 == 0) | (fd_dout == 0)) begin
+        if ((fd_din_q == 0) | (fd_dout == 0)) begin
             $display("File open error.");
             $finish;
         end else begin
@@ -83,8 +83,7 @@ module sim_ddc_quad(
             $display("p_setting open error.");
             $finish;
         end else begin
-            $fscanf(fd_p, "%b\n", pinc);
-            $fscanf(fd_p, "%b\n", poff);
+            $fscanf(fd_p, "%b\n", s_axis_phase_tdata);
             $fclose(fd_p);
         end
     endtask
@@ -107,15 +106,14 @@ module sim_ddc_quad(
 
         #(STEP_SYS*10);
         @(posedge clk);
-        valid_in <= 1;
+        s_axis_phase_tvalid <= 1;        
         @(posedge clk);
-        valid_in <= 0;
         repeat(10) @(posedge clk);
         din_on <= 1;
         @(posedge clk);
         wait(finish);
 
-        valid_in <= 0;
+        s_axis_phase_tvalid <= 0;
 
         #(STEP_SYS*30);
         file_close();
@@ -138,16 +136,12 @@ module sim_ddc_quad(
 
     always @(posedge clk) begin
         if (din_on & ~din_fin) begin
-            $fscanf(fd_din_0, "%b\n", data_in_0);
-            $fscanf(fd_din_1, "%b\n", data_in_1);
-            $fscanf(fd_din_2, "%b\n", data_in_2);
-            $fscanf(fd_din_3, "%b\n", data_in_3);
-            if($feof(fd_din_3) != 0) begin
+            $fscanf(fd_din_i, "%b\n", s_axis_i_tdata);
+            $fscanf(fd_din_q, "%b\n", s_axis_q_tdata);
+            if($feof(fd_din_q) != 0) begin
                 $display("DIN fin");
-                $fclose(fd_din_0);
-                $fclose(fd_din_1);
-                $fclose(fd_din_2);
-                $fclose(fd_din_3);
+                $fclose(fd_din_i);
+                $fclose(fd_din_q);
                 din_fin <= 1'b1;
             end
         end

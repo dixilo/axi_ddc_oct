@@ -6,25 +6,17 @@ module sim_ddc_core(
     parameter STEP_SYS = 40;
     parameter SIM_LENGTH = 65536;
 
-    // input
-    logic [47:0] phase_in;
-    logic valid_in;
-    logic clk;
-    logic [31:0] data_in;
-
-    // Output
-    logic valid_out;
-    logic [63:0] ddc_out;
-    logic [63:0]data_out;
-
-    assign data_out = ddc_out;
-
-    // Feed to DDS compiler
-    logic [19:0] pinc;
-    logic [19:0] poff;
-    logic [19:0] pinc_x4;
-    assign pinc_x4 = {pinc[17:0], 2'b0};
-    assign phase_in = {4'b0, poff, 4'b0, pinc_x4};
+    logic        s_axis_aclk;
+    logic [31:0] s_axis_tdata;
+    logic        s_axis_tvalid;
+    logic        s_axis_tready;
+    logic [63:0] s_axis_phase_tdata;
+    logic        s_axis_phase_tvalid;
+    logic [31:0] m_axis_dds_tdata;
+    logic        m_axis_dds_tvalid;
+    logic [63:0] m_axis_ddc_tdata;
+    logic        m_axis_ddc_tvalid;
+    logic        resync;
 
     // Control data
     logic din_on;
@@ -32,10 +24,16 @@ module sim_ddc_core(
     logic write_on;
 
     // for output convention
-    logic [31:0] i_out;
-    logic [31:0] q_out;
-    assign i_out = data_out[31:0];
-    assign q_out = data_out[63:32];
+    logic [31:0] ddc_i_out;
+    logic [31:0] ddc_q_out;
+    assign ddc_i_out = m_axis_ddc_tdata[31:0];
+    assign ddc_q_out = m_axis_ddc_tdata[63:32];
+
+    logic [15:0] dds_i_out;
+    logic [15:0] dds_q_out;
+    assign dds_i_out = m_axis_dds_tdata[15:0];
+    assign dds_q_out = m_axis_dds_tdata[31:16];
+
 
     // write output
     integer fd_din;
@@ -55,8 +53,8 @@ module sim_ddc_core(
     endtask
     
     task rst_gen();
-        pinc = 0;
-        poff = 0;
+        s_axis_phase_tdata = 64'b0;
+        s_axis_phase_tvalid = 0;
         din_on = 0;
         din_fin = 0;
         valid_in = 0;
@@ -81,8 +79,7 @@ module sim_ddc_core(
             $display("p_setting open error.");
             $finish;
         end else begin
-            $fscanf(fd_p, "%b\n", pinc);
-            $fscanf(fd_p, "%b\n", poff);
+            $fscanf(fd_p, "%b\n", s_axis_phase_tdata);
             $fclose(fd_p);
         end
     endtask
@@ -105,9 +102,8 @@ module sim_ddc_core(
 
         #(STEP_SYS*10);
         @(posedge clk);
-        valid_in <= 1;
+        s_axis_phase_tvalid <= 1;
         @(posedge clk);
-        valid_in <= 0;
         repeat(7) @(posedge clk);
         din_on <= 1;
         repeat(7) @(posedge clk);
@@ -115,7 +111,7 @@ module sim_ddc_core(
         @(posedge clk);
         wait(finish);
 
-        valid_in <= 0;
+        s_axis_phase_tvalid <= 0;
 
         #(STEP_SYS*30);
         file_close();
@@ -126,7 +122,7 @@ module sim_ddc_core(
     always @(posedge clk) begin
         if (write_on && write_ready) begin
             if (~finish) begin
-                $fdisplay(fd_dout, "%b", data_out);
+                $fdisplay(fd_dout, "%b", m_axis_ddc_tdata);
                 if (counter == (SIM_LENGTH - 1)) begin
                     finish <= 1;
                 end else begin
@@ -138,7 +134,7 @@ module sim_ddc_core(
 
     always @(posedge clk) begin
         if (din_on & ~din_fin) begin
-            $fscanf(fd_din, "%b\n", data_in);
+            $fscanf(fd_din, "%b\n", s_axis_tdata);
             if($feof(fd_din) != 0) begin
                 $display("DIN fin");
                 $fclose(fd_din);

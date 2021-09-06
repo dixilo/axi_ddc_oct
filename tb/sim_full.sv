@@ -7,34 +7,44 @@ import system_axi_vip_0_pkg::*;
 module sim_full(
 
     );
-    
+
     localparam STEP_SYS = 200;
     localparam STEP_DEV = 40;
     localparam SIM_LENGTH = 65536;
     localparam DS_RATE = 32;
 
-    logic axi_aresetn;
-    logic axi_clk;
-    logic [31:0]data_in_0;
-    logic [31:0]data_in_1;
-    logic [31:0]data_in_2;
-    logic [31:0]data_in_3;
-    logic [95:0]data_out;
-    logic dev_clk;
-    logic dev_rst;
-    logic valid_out;
-    logic resync;
-    
+    // input
+    logic [127:0] s_axis_i_tdata;
+    logic         s_axis_i_tready;
+    logic         s_axis_i_valid;
+    logic [127:0] s_axis_q_tdata;
+    logic         s_axis_q_tready;
+    logic         s_axis_q_valid;
+
+    logic [63:0]  s_axis_phase_tdata;
+    logic         s_axis_phase_tvalid;
+    logic         resync;
+
+    logic [127:0] m_axis_ddsi_tdata;
+    logic         m_axis_ddsi_tvalid;
+    logic         m_axis_ddsi_tready;
+
+    logic [127:0] m_axis_ddsq_tdata;
+    logic         m_axis_ddsq_tvalid;
+    logic         m_axis_ddsq_tready;
+
+    logic [63:0]  m_axis_ddc_tdata;
+    logic         m_axis_ddc_tvalid;
+    logic         m_axis_ddc_tready;
+
+    wire [31:0] pinc = s_axis_phase_tdata[31:0];
+    wire [31:0] poff = s_axis_phase_tdata[63:31];
+
     system_wrapper dut(.*);
 
-    logic [19:0] pinc;
-    logic [19:0] poff;
-
     // Utility
-    integer fd_din_0;
-    integer fd_din_1;
-    integer fd_din_2;
-    integer fd_din_3;
+    integer fd_din_i;
+    integer fd_din_q;
 
     integer fd_dout;
     logic write_ready = 0;
@@ -43,50 +53,47 @@ module sim_full(
 
     // read setting
     integer fd_p;
-    
+
     // data flow control
     logic din_on;
     logic din_fin;
 
 
     system_axi_vip_0_mst_t  vip_agent;
-    
-    
+
+
     task clk_gen();
         axi_clk = 0;
         forever #(STEP_SYS/2) axi_clk = ~axi_clk;
     endtask
-    
+
     task clk_gen_dev();
-        dev_clk = 0;
-        forever #(STEP_DEV/2) dev_clk = ~dev_clk;
+        s_axis_aclk = 0;
+        forever #(STEP_DEV/2) s_axis_aclk = ~s_axis_aclk;
     endtask
-    
+
     task rst_gen();
         axi_aresetn = 0;
-        dev_rst = 1;
-        data_in_0 = 0;
-        data_in_1 = 0;
-        data_in_2 = 0;
-        data_in_3 = 0;
+        s_axis_aresetn = 0;
+        s_axis_i_tdata = 0;
+        s_axis_q_tdata = 0;
+
         din_on = 0;
         din_fin = 0;
         resync = 0;
 
         #(STEP_SYS*10);
         axi_aresetn = 1;
-        dev_rst = 0;
+        s_axis_aresetn = 1;
     endtask
     
     task file_open();
-        fd_din_0 = $fopen("./data_in_0.bin", "r");
-        fd_din_1 = $fopen("./data_in_1.bin", "r");
-        fd_din_2 = $fopen("./data_in_2.bin", "r");
-        fd_din_3 = $fopen("./data_in_3.bin", "r");
+        fd_din_i = $fopen("./data_in_i.bin", "r");
+        fd_din_q = $fopen("./data_in_q.bin", "r");
 
         fd_dout = $fopen("./data_out.bin", "w");
 
-        if ((fd_din_3 == 0) | (fd_dout == 0)) begin
+        if ((fd_din_q == 0) | (fd_dout == 0)) begin
             $display("File open error.");
             $finish;
         end else begin
@@ -101,8 +108,7 @@ module sim_full(
             $display("p_setting open error.");
             $finish;
         end else begin
-            $fscanf(fd_p, "%b\n", pinc);
-            $fscanf(fd_p, "%b\n", poff);
+            $fscanf(fd_p, "%b\n", s_axis_phase_tdata);
             $fclose(fd_p);
         end
     endtask
@@ -135,13 +141,13 @@ module sim_full(
         
         // PINC
         wr_transaction.set_write_cmd(4, XIL_AXI_BURST_TYPE_INCR, 0, 0, xil_axi_size_t'(xil_clog2((32)/8)));
-        wr_transaction.set_data_block({12'b0, pinc});
+        wr_transaction.set_data_block(pinc);
         vip_agent.wr_driver.send(wr_transaction);
 
         #(STEP_SYS*10);
         // POFF
         wr_transaction.set_write_cmd(8, XIL_AXI_BURST_TYPE_INCR, 0, 0, xil_axi_size_t'(xil_clog2((32)/8)));
-        wr_transaction.set_data_block({12'b0, poff});
+        wr_transaction.set_data_block(poff);
         vip_agent.wr_driver.send(wr_transaction);
         #(STEP_SYS*10);
 
@@ -163,22 +169,22 @@ module sim_full(
         wr_transaction.set_write_cmd(16, XIL_AXI_BURST_TYPE_INCR, 0, 0, xil_axi_size_t'(xil_clog2((32)/8)));
         wr_transaction.set_data_block(1);
         vip_agent.wr_driver.send(wr_transaction);
-        @(posedge dev_clk);
+        @(posedge s_axis_aclk);
         //resync <= 1;
-        @(posedge dev_clk);
+        @(posedge s_axis_aclk);
         resync <= 0;
-        repeat(10)@(posedge dev_clk);
+        repeat(10)@(posedge s_axis_aclk);
         din_on <= 1;
 
         wait(finish);
 
-       repeat(1000)@(posedge dev_clk);
+        repeat(1000)@(posedge s_axis_aclk);
 
         $finish;
     end
-    
-    always @(posedge dev_clk) begin
-        if (valid_out && din_on && write_ready) begin
+
+    always @(posedge s_axis_aclk) begin
+        if (m_axis_ddc_tvalid && din_on && write_ready) begin
             if (~finish) begin
                 $fdisplay(fd_dout, "%b", data_out);
                 if (counter == (4*SIM_LENGTH/DS_RATE - 1)) begin
@@ -191,22 +197,17 @@ module sim_full(
         end
     end
 
-    always @(posedge dev_clk) begin
+    always @(posedge s_axis_aclk) begin
         if (din_on & ~din_fin) begin
-            $fscanf(fd_din_0, "%b\n", data_in_0);
-            $fscanf(fd_din_1, "%b\n", data_in_1);
-            $fscanf(fd_din_2, "%b\n", data_in_2);
-            $fscanf(fd_din_3, "%b\n", data_in_3);
-            if($feof(fd_din_3) != 0) begin
+            $fscanf(fd_din_i, "%b\n", s_axis_i_tdata);
+            $fscanf(fd_din_q, "%b\n", s_axis_q_tdata);
+            if($feof(fd_din_q) != 0) begin
                 $display("DIN fin");
-                $fclose(fd_din_0);
-                $fclose(fd_din_1);
-                $fclose(fd_din_2);
-                $fclose(fd_din_3);
+                $fclose(fd_din_i);
+                $fclose(fd_din_q);
                 din_fin <= 1'b1;
             end
         end
     end
 
-    
 endmodule

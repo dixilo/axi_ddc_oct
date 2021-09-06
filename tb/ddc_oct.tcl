@@ -1,23 +1,17 @@
-# FFT quad
-set ip_name "axi_ddc_oct"
-create_project $ip_name "." -force
-source ./util.tcl
+## Utility
+source ../util.tcl
 
-# file
-set proj_fileset [get_filesets sources_1]
-add_files -norecurse -scan_for_includes -fileset $proj_fileset [list \
-"src/axi_ddc_oct.v" \
-"src/axi_ddc_oct_core.v" \
-"src/accumulator.v" \
-"src/ddc_core.v" \
-"src/ddc_oct.v" \
-]
+## Device setting (KCU105)
+set p_device "xcku040-ffva1156-2-e"
+set p_board "xilinx.com:kcu105:part0:1.5"
 
-set_property "top" "axi_ddc_oct" $proj_fileset
+set project_name "ddc_oct"
 
-ipx::package_project -root_dir "." -vendor kuhep -library user -taxonomy /kuhep
-set_property name $ip_name [ipx::current_core]
-set_property vendor_display_name {kuhep} [ipx::current_core]
+create_project -force $project_name ./${project_name} -part $p_device
+set_property board_part $p_board [current_project]
+
+add_files -norecurse "../hdl/ddc_core.v"
+add_files -norecurse "../hdl/ddc_oct.v"
 
 ################################################ Parameters
 set f_clk_MHz 256
@@ -32,7 +26,7 @@ set adder_3rd_width 30
 set adder_dds_width 16
 
 ################################################ IP generation
-############### DDC OCT
+############### DDC QUAD
 ### DDS
 create_ip -vlnv [latest_ip dds_compiler] -module_name dds_oct
 set dds_oct [get_ips dds_oct]
@@ -145,32 +139,31 @@ set_property CONFIG.CE "false" $adder_dds
 set_property CONFIG.Latency 3 $adder_dds
 set_property generate_synth_checkpoint 0 [get_files adder_dds.xci]
 
+set_property top ddc_oct [current_fileset]
 
-################################################ Register XCI files
-# file groups
-ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/dds_oct/dds_oct.xci \
-[ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/multiplier_oct/multiplier_oct.xci \
-[ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_oct/adder_oct.xci \
-[ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/subtracter_oct/subtracter_oct.xci \
-[ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_phase_oct/adder_phase_oct.xci \
-[ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_1st_oct/adder_1st_oct.xci \
-[ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_2nd_oct/adder_2nd_oct.xci \
-[ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_3rd_oct/adder_3rd_oct.xci \
-[ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/c_accum_oct/c_accum_oct.xci \
-[ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
+### Simulation
+add_files -fileset sim_1 -norecurse ./sim_ddc_oct.sv
+set_property top sim_ddc_oct [get_filesets sim_1]
+generate_target Simulation [get_files dds_oct.xci]
+generate_target Simulation [get_files subtracter_oct.xci]
+generate_target Simulation [get_files adder_oct.xci]
+generate_target Simulation [get_files multiplier_oct.xci]
+generate_target Simulation [get_files adder_phase_oct.xci]
+generate_target Simulation [get_files adder_1st_oct.xci]
+generate_target Simulation [get_files adder_2nd_oct.xci]
+generate_target Simulation [get_files adder_3rd_oct.xci]
 
-# Reordering
-ipx::reorder_files -after ./axi_ddc_oct.srcs/sources_1/ip/c_accum_oct/c_accum_oct.xci ../axi_ddc_oct.v [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::reorder_files -after ../ddc_oct.v ../axi_ddc_oct_core.v [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
+# Run
+## Synthesis
+#launch_runs synth_1
+#wait_on_run synth_1
+#open_run synth_1
+#report_utilization -file "./utilization_synth.txt"
 
-# Interface
-ipx::infer_bus_interface dev_clk xilinx.com:signal:clock_rtl:1.0 [ipx::current_core]
-ipx::save_core [ipx::current_core]
+## Implementation
+#set_property strategy Performance_Retiming [get_runs impl_1]
+#launch_runs impl_1 -to_step write_bitstream
+#wait_on_run impl_1
+#open_run impl_1
+#report_timing_summary -file timing_impl.log
+#report_utilization -file "./utilization_impl.txt"
