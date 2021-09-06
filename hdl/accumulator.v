@@ -2,7 +2,7 @@
 
 module accumulator #(
     parameter integer LEN_WIDTH = 18,
-    parameter integer DATA_WIDTH = 31
+    parameter integer DATA_WIDTH = 30
 )(
     input clk,
     input rst,
@@ -52,7 +52,7 @@ module accumulator #(
     assign counter_max = (counter == (length - 1));
 
     // Accumulator
-    c_accum_dd2 accum_inst(
+    c_accum_oct accum_inst(
         .clk(clk),
         .bypass(bypass),
         .b(data_in),

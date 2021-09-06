@@ -1,6 +1,6 @@
 `timescale 1 ns / 1 ps
 
-module axi_ddc_daq2 #
+module axi_ddc_oct #
 (
     parameter integer C_S00_AXI_DATA_WIDTH = 32,
     parameter integer C_S00_AXI_ADDR_WIDTH = 5,
@@ -32,8 +32,8 @@ module axi_ddc_daq2 #
     output wire         m_axis_ddsq_tvalid,
     input  wire         m_axis_ddsq_tready,
 
-    // Oct DDC output [61:32] Q, [29:0] I
-    output wire [63:0] m_axis_ddc_tdata,
+    // Oct DDC output [95:48] Q, [47:0] I
+    output wire [95:0] m_axis_ddc_tdata,
     output wire        m_axis_ddc_tvalid,
     input wire         m_axis_ddc_tready,
 
@@ -68,10 +68,10 @@ module axi_ddc_daq2 #
     wire [31:0] rate_axi;
     wire        resync_soft_axi;
 
-    axi_ddc_daq2_core # ( 
+    axi_ddc_oct_core # ( 
         .C_S_AXI_DATA_WIDTH(C_S00_AXI_DATA_WIDTH),
         .C_S_AXI_ADDR_WIDTH(C_S00_AXI_ADDR_WIDTH),
-    ) axi_ddc_daq2_core_inst (
+    ) axi_ddc_oct_core_inst (
         .S_AXI_ACLK(s00_axi_aclk),
         .S_AXI_ARESETN(s00_axi_aresetn),
         .S_AXI_AWADDR(s00_axi_awaddr),
@@ -105,14 +105,23 @@ module axi_ddc_daq2 #
     /////////////////////////////////////////////////////////////////// User logic
     // Connection between modules
     localparam N_CH_WIDTH = $clog2(N_CH);
-    localparam DDC_WIDTH = 32 // DDC width
-    localparam ACC_WIDTH = 48 // Accumulator width
+    localparam N_CH_C = 2**N_CH_WIDTH;
+    localparam DDC_WIDTH = 32; // DDC width
+    localparam ACC_WIDTH = 48; // Accumulator width
+    localparam DDS_WIDTH = 128; // DDS width
+
+    localparam PINC_WIDTH = 32;
+    localparam POFF_WIDTH = 32;
 
     wire [DDC_WIDTH*2-1:0] ddc_out [0:N_CH-1];
+    wire [DDS_WIDTH-1:0]   ddsi_out [0:N_CH-1];
+    wire [DDS_WIDTH-1:0]   ddsq_out [0:N_CH-1];
     wire [ACC_WIDTH*2-1:0] acc_out [0:N_CH-1];
     reg  [ACC_WIDTH*2-1:0] acc_out_buf [0:N_CH-1];
+
     wire [N_CH-1:0] valid_ddc;
     wire [N_CH-1:0] valid_acc;
+    wire [N_CH-1:0] valid_dds;
 
     // Pipeline
     reg  [ACC_WIDTH*2-1:0] data_pipe_buf;
@@ -139,8 +148,8 @@ module axi_ddc_daq2 #
 
     // handshake signal
     reg reconf;     // driven by AXI.
-    reg reconf_start;
     reg reconf_fin; // driven by data converter.
+    reg reconf_fin_buf;
 
     always @(posedge s00_axi_aclk) begin
         if (s00_axi_aresetn == 1'b0) begin
@@ -161,126 +170,103 @@ module axi_ddc_daq2 #
             reconf_fin <= 1'b0;
         end else begin
             if (reconf) begin
-                if (reconf_start == 1'b0) begin
-                    reconf_start <= 1'b1;
-                end else begin
-                    reconf_start <= 1'b0;
-                    reconf_fin <= 1'b1;
-                end
-            end
-        end
-    end
-
-
-    wire wr_ch_axi;
-    assign wr_ch_axi = (axi_awaddr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB] == 0);
-    reg busy_ch_axi;
-    reg busy_ch;
-    reg [1:0] busy_buf;
-    wire config_strb;
-    wire config_fin;
-    reg [17:0] accum_length;
-
-
-    reg [N_CH_WIDTH-1:0] ch_buf_axi;
-    reg [N_CH_WIDTH-1:0] ch_buf;
-    reg [19:0] poff_buf;
-    reg [19:0] pinc_buf;
-    
-
-    always @(posedge S_AXI_ACLK) begin
-        if (S_AXI_ARESETN == 1'b0) begin
-            busy_ch_axi <= 1'b0;
-            ch_buf_axi <= 1'b0;
-        end else begin
-            if (wr_ch_axi && slv_reg_wren) begin
-                busy_ch_axi <= 1'b1;
-                ch_buf_axi <= S_AXI_WDATA[N_CH_WIDTH-1:0];
+                reconf_fin <= 1'b1;
             end else begin
-                if (config_fin) begin
-                    busy_ch_axi <= 1'b0;
-                end
+                reconf_fin <= 1'b0;
             end
         end
     end
 
-    assign user_wbusy = busy_ch_axi;
-
-    // AXI to dev clk buffer
-    always @(posedge dev_clk) begin
-        ch_buf <= ch_buf_axi;
-        pinc_buf <= slv_reg1[19:0];
-        poff_buf <= slv_reg2[19:0];
-        busy_ch <= busy_ch_axi;
+    // pinc/poff configuration
+    always @(posedge s_axis_aclk) begin
+        reconf_fin_buf <= reconf_fin;
     end
 
-    always @(posedge dev_clk) begin
-        busy_buf <= {busy_buf[0], busy_ch};
+    // First 1 cycle of reconf_fin
+    wire pvalid_dev = (reconf_fin == 1'b1) & (reconf_fin_buf == 1'b0);
+
+    reg [PINC_WIDTH-1:0] pinc_buff [0:N_CH-1];
+    reg [POFF_WIDTH-1:0] poff_buff [0:N_CH-1];
+
+    // pinc/poff registration
+    always @(posedge s_axis_aclk) begin
+        if (pvalid_dev) begin
+            pinc_buff[ch_buff_axi] <= pinc_buff_axi;
+            poff_buff[ch_buff_axi] <= poff_buff_axi;
+        else begin
+            ;
+        end
+    end    
+
+    // Accumulation length
+    reg [31:0] acc_len;
+
+    always @(posedge s_axis_aclk) begin
+        acc_len <= rate_axi;
     end
-    assign config_strb = (busy_buf == 2'b01);
-    assign config_fin = (busy_buf == 2'b11);
 
-
-    // Address 3: Accumulation length
-
-    always @(posedge dev_clk) begin
-        accum_length <= slv_reg3[17:0];
-    end
-
-    // Address 4: software resync
+    // Software resync
     reg [1:0] resync_soft_buf;
-    wire resync_soft;
-    always @(posedge dev_clk) begin
+    always @(posedge s_axis_aclk) begin
         resync_soft_buf <= {resync_soft_buf[0], resync_soft_axi};
     end
-    assign resync_soft = (resync_soft_buf == 2'b01);
+    wire resync_soft = (resync_soft_buf == 2'b01);
 
     // Module generation
-
     genvar i;
     generate
         for(i=0;i<N_CH;i=i+1) begin:ddc_accm
-            ddc_quad ddc_quad_inst(
-                .clk(dev_clk),
-                .data_in_0(data_in_0),
-                .data_in_1(data_in_1),
-                .data_in_2(data_in_2),
-                .data_in_3(data_in_3),
-                .pinc(pinc_buf),
-                .poff(poff_buf),
-                .p_valid(config_strb & (ch_buf == i)),
+            ddc_oct ddc_oct_inst(
+                .s_axis_aclk(s_axis_aclk),
+                .s_axis_i_tdata(s_axis_i_tdata),
+                .s_axis_i_tready(s_axis_i_tready),
+                .s_axis_i_tvalid(s_axis_i_tvalid),
+                .s_axis_q_tdata(s_axis_q_tdata),
+                .s_axis_q_tready(s_axis_q_tready),
+                .s_axis_q_tvalid(s_axis_q_tvalid),
+                .s_axis_phase_tdata({poff_buf[i], pinc_buff[i]}),
+                .s_axis_phase_tvalid(1'b1),
                 .resync(resync | resync_soft),
-                .valid_out(valid_ddc[i]),
-                .data_out(ddc_out[i])
+
+                .m_axis_ddsi_tdata(ddsi_out[i]),
+                .m_axis_ddsi_tvalid(valid_dds[i]),
+                .m_axis_ddsi_tready(1'b1),
+                .m_axis_ddsq_tdata(ddsq_out[i]),
+                .m_axis_ddsq_tvalid(),
+                .m_axis_ddsq_tready(1'b1),
+
+                .m_axis_ddc_tdata(ddc_out[i]),
+                .m_axis_ddc_tvalid(valid_ddc[i]),
+                .m_axis_ddc_tready(1'b1)
             );
 
             accumulator accum_inst_i(
-                .clk(dev_clk),
-                .rst(dev_rst),
+                .clk(s_axis_aclk),
+                .rst(s_axis_aresetn),
                 .valid_in(valid_ddc[i]),
-                .length(accum_length),
-                .data_in(ddc_out[i][30:0]),
-                .valid_out(valid_accum[i]),
-                .data_out(accum_out[i][47:0])
+                .length(acc_len),
+                .data_in(ddc_out[i][DDC_WIDTH-1:0]),
+                .valid_out(valid_acc[i]),
+                .data_out(acc_out[i][ACC_WIDTH-1:0])
             );
 
             accumulator accum_inst_q(
                 .clk(dev_clk),
                 .rst(dev_rst),
                 .valid_in(valid_ddc[i]),
-                .length(accum_length),
-                .data_in(ddc_out[i][62:32]),
-                .data_out(accum_out[i][95:48])
+                .length(acc_len),
+                .data_in(ddc_out[i][32+DDC_WIDTH-1:32]),
+                .data_out(acc_out[i][48+ACC_WIDTH-1:48])
             );
         end
     endgenerate
 
     // Sequentialize
     integer j;
-    always @(posedge dev_clk) begin
-        if (valid_accum[0]) begin
+    always @(posedge s_axis_aclk) begin
+        if (valid_acc[0]) begin
             for (j=0; j < N_CH; j = j+1) begin
-                accum_out_buf[j] <= accum_out[j];
+                acc_out_buf[j] <= acc_out[j];
             end
         end
     end
@@ -289,8 +275,8 @@ module axi_ddc_daq2 #
     reg valid_seq;
     wire fin_seq;
 
-    always @(posedge dev_clk) begin
-        if (valid_accum[0]) begin
+    always @(posedge s_axis_aclk) begin
+        if (valid_acc[0]) begin
             valid_seq <= 1;
         end else if (fin_seq) begin
             valid_seq <= 0;
@@ -299,8 +285,8 @@ module axi_ddc_daq2 #
 
     assign fin_seq = (ch_cnt == (N_CH - 1));
 
-    always @(posedge dev_clk) begin
-        if (valid_accum[0]) begin
+    always @(posedge s_axis_aclk) begin
+        if (valid_acc[0]) begin
             ch_cnt <= 0;
         end else if (valid_seq) begin
             ch_cnt <= ch_cnt + 1;
@@ -309,17 +295,61 @@ module axi_ddc_daq2 #
         end
     end
 
-    always @(posedge dev_clk) begin
-        data_out_buf <= accum_out_buf[ch_cnt];
+    always @(posedge s_axis_aclk) begin
+        data_pipe_buf <= acc_out_buf[ch_cnt];
     end
 
-    assign data_out = data_out_buf;
+    assign m_axis_ddc_tdata = data_pipe_buf;
 
-    always @(posedge dev_clk) begin
-        valid_out_buf <= valid_seq;
+    always @(posedge s_axis_aclk) begin
+        valid_pipe_buf <= valid_seq;
     end
 
-    assign valid_out = valid_out_buf;
+    assign m_axis_ddc_tvalid = valid_pipe_buf;
 
+
+    //////////////////////////////////////////////////////// DDS adder
+    wire [DDS_WIDTH-1:0] dds_buf_i [0:2*N_CH_C-2];
+    wire [DDS_WIDTH-1:0] dds_buf_q [0:2*N_CH_C-2];
+
+    // dds_buf[0] to dds_buf[N-1] stores raw output from ddc cores
+    integer s;
+    for (s=0; s < N_CH; s = s+1) begin
+        dds_buf_i[s] <= m_axis_ddsi_tdata[s];
+        dds_buf_q[s] <= m_axis_ddsq_tdata[s];
+    end
+
+    // l=0: dds_buf[0] = dds_buf[1] + dds_buf[2]
+    // l=1: dds_buf[1] = dds_buf[3] + dds_buf[4], dds_buf[2] = dds_buf[5] + dds_buf[6]
+    // l=2: dds_buf[3] = dds_buf[7] + dds_buf[8], ... dds_buf[6] = dds_buf[13] + dds_buf[14]
+    // l=3: dds_buf[7] = ...
+
+    genvar l, m, n;
+    generate
+        for(l=0;l<N_CH_WIDTH;l=l+1) begin:kaisen
+            for(m=0;m<2**l);m=m+1) begin:siai
+                for(n=0;n<8;n=n+1) begin:lane
+                    adder_dds adder_ddsi_inst(
+                        .clk(s_axis_aclk),
+                        .a( dds_buf_i[2**(l+1) - 1 + 2*m    ][16*(n+1)-1:16*n]),
+                        .b( dds_buf_i[2**(l+1) - 1 + 2*m + 1][16*(n+1)-1:16*n]),
+                        .s({dds_buf_i[2**l     - 1 +   m    ][16*(n+1)-2:16*n], z})
+                    );
+                    adder_dds adder_ddsq_inst(
+                        .clk(s_axis_aclk),
+                        .a( dds_buf_q[2**(l+1) - 1 + 2*m    ][16*(n+1)-1:16*n]),
+                        .b( dds_buf_q[2**(l+1) - 1 + 2*m + 1][16*(n+1)-1:16*n]),
+                        .s({dds_buf_q[2**l     - 1 +   m    ][16*(n+1)-2:16*n], z})
+                    );
+                end
+            end
+        end
+    endgenerate
+
+    integer p;
+    for(p=0;p<N_CH;p=p+1) begin:first
+        assign dds_buf_i[N_CH_C + p][DDS_WIDTH-1:0] = ddsi_out[p];
+        assign dds_buf_q[N_CH_C + p][DDS_WIDTH-1:0] = ddsq_out[p];
+    end
 
 endmodule

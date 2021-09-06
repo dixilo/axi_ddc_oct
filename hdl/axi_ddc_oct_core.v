@@ -1,7 +1,7 @@
 
 `timescale 1 ns / 1 ps
 
-module axi_ddc_daq2_core #
+module axi_ddc_oct_core #
 (
     parameter integer C_S_AXI_DATA_WIDTH	= 32,
     parameter integer C_S_AXI_ADDR_WIDTH	= 5
