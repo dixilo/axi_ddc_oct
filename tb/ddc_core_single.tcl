@@ -1,16 +1,15 @@
 ## Utility
-source ./util.tcl
+source ../util.tcl
 
 ## Device setting (KCU105)
 set p_device "xcku040-ffva1156-2-e"
-set p_board "xilinx.com:kcu105:part0:1.5"
-
+set p_board "xilinx.com:kcu105:part0:1.7"
 set project_name "ddc_core_single"
 
 create_project -force $project_name ./${project_name} -part $p_device
 set_property board_part $p_board [current_project]
 
-add_files -norecurse "./ddc_core.v"
+add_files -norecurse "../hdl/ddc_core.v"
 
 ### DDS
 ################################################ Parameters

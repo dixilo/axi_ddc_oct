@@ -48,8 +48,8 @@ module sim_ddc_core(
     ddc_core dut(.*);
 
     task clk_gen();
-        clk = 0;
-        forever #(STEP_SYS/2) clk = ~clk;
+        s_axis_aclk = 0;
+        forever #(STEP_SYS/2) s_axis_aclk = ~s_axis_aclk;
     endtask
     
     task rst_gen();
@@ -57,8 +57,8 @@ module sim_ddc_core(
         s_axis_phase_tvalid = 0;
         din_on = 0;
         din_fin = 0;
-        valid_in = 0;
         write_on = 0;
+        resync = 0;
     endtask
     
     task file_open();
@@ -101,14 +101,14 @@ module sim_ddc_core(
         p_setting_read();
 
         #(STEP_SYS*10);
-        @(posedge clk);
+        @(posedge s_axis_aclk);
         s_axis_phase_tvalid <= 1;
-        @(posedge clk);
-        repeat(7) @(posedge clk);
+        @(posedge s_axis_aclk);
+        repeat(7) @(posedge s_axis_aclk);
         din_on <= 1;
-        repeat(7) @(posedge clk);
+        repeat(7) @(posedge s_axis_aclk);
         write_on <= 1;
-        @(posedge clk);
+        @(posedge s_axis_aclk);
         wait(finish);
 
         s_axis_phase_tvalid <= 0;
@@ -119,7 +119,7 @@ module sim_ddc_core(
         $finish;
     end
         
-    always @(posedge clk) begin
+    always @(posedge s_axis_aclk) begin
         if (write_on && write_ready) begin
             if (~finish) begin
                 $fdisplay(fd_dout, "%b", m_axis_ddc_tdata);
@@ -132,13 +132,15 @@ module sim_ddc_core(
         end
     end
 
-    always @(posedge clk) begin
+    always @(posedge s_axis_aclk) begin
         if (din_on & ~din_fin) begin
             $fscanf(fd_din, "%b\n", s_axis_tdata);
+            s_axis_tvalid <= 1'b1;
             if($feof(fd_din) != 0) begin
                 $display("DIN fin");
                 $fclose(fd_din);
                 din_fin <= 1'b1;
+                s_axis_tvalid <= 1'b0;
             end
         end
     end

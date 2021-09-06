@@ -26,6 +26,7 @@ module ddc_core(
     localparam ADC_RES = 12;
     localparam MUL_RES = 26;
     localparam DDC_PAD = 32 - MUL_RES;
+    localparam DDS_PAD = 16 - DDS_RES;
 
     localparam DDC_LATENCY = 6;
     localparam DDS_LATENCY = 8;
@@ -56,15 +57,16 @@ module ddc_core(
 
     assign cos_dds = dds_out[DDS_RES-1:0];
     assign sin_dds = dds_out[DDS_RES+15:16];
-    assign cos_data = data_in[ADC_RES-1:0];
-    assign sin_data = data_in[ADC_RES+15:16];
+    assign cos_data = s_axis_tdata[ADC_RES-1:0];
+    assign sin_data = s_axis_tdata[ADC_RES+15:16];
 
     assign m_axis_ddc_tdata = {{(DDC_PAD){out_q[MUL_RES]}}, out_q, {(DDC_PAD){out_i[MUL_RES]}}, out_i};
+    assign m_axis_dds_tdata = {{(DDS_PAD){sin_dds[DDS_RES-1]}}, sin_dds, {(DDS_PAD){cos_dds[DDS_RES-1]}}, cos_dds};
 
     dds_oct dds_inst(
-        .aclk(clk),
+        .aclk(s_axis_aclk),
         .s_axis_phase_tvalid(s_axis_phase_tvalid),
-        .s_axis_phase_tdata({resync, phase_in}), // resync, poff [63:32], pinc [31:0], 65 bit
+        .s_axis_phase_tdata({resync, s_axis_phase_tdata}), // resync, poff [63:32], pinc [31:0], 65 bit
         .m_axis_data_tvalid(dds_valid),
         .m_axis_data_tdata(dds_out) // cos [13:0], sin [29:16], 32 bit width
     );
@@ -77,15 +79,17 @@ module ddc_core(
             p_conf <= p_conf;
     end
 
-    // DDS valid generation
-    always @(posedge s_axis_aclk) begin
-        dds_valid_buf <= {dds_valid_buf[DDS_LATENCY-2:0], p_conf};
-    end
-    assign m_axis_dds_tvalid = dds_valid_buf[DDS_LATENCY-1];
+    //// DDS valid generation
+    // always @(posedge s_axis_aclk) begin
+    //     dds_valid_buf <= {dds_valid_buf[DDS_LATENCY-2:0], p_conf};
+    // end
+    // assign m_axis_dds_tvalid = dds_valid_buf[DDS_LATENCY-1];
+
+    assign m_axis_dds_tvalid = dds_valid;
 
     // DDC valid generation
     always @(posedge s_axis_aclk) begin
-        ddc_valid_buf[DDC_LATENCY-1:2] <= ddc_valid_buf[DDC_LATENCY-2:1];
+        ddc_valid_buf[DDC_LATENCY-1:1] <= ddc_valid_buf[DDC_LATENCY-2:0];
         ddc_valid_buf[0] <= s_axis_tvalid & m_axis_dds_tvalid;
     end
     assign m_axis_ddc_tvalid = ddc_valid_buf[DDC_LATENCY-1];

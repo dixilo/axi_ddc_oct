@@ -3,7 +3,7 @@ source ../util.tcl
 
 ## Device setting (KCU105)
 set p_device "xcku040-ffva1156-2-e"
-set p_board "xilinx.com:kcu105:part0:1.5"
+set p_board "xilinx.com:kcu105:part0:1.7"
 
 set project_name "ddc_oct"
 

@@ -6,11 +6,11 @@ source ./util.tcl
 # file
 set proj_fileset [get_filesets sources_1]
 add_files -norecurse -scan_for_includes -fileset $proj_fileset [list \
-"src/axi_ddc_oct.v" \
-"src/axi_ddc_oct_core.v" \
-"src/accumulator.v" \
-"src/ddc_core.v" \
-"src/ddc_oct.v" \
+"hdl/axi_ddc_oct.v" \
+"hdl/axi_ddc_oct_core.v" \
+"hdl/accumulator.v" \
+"hdl/ddc_core.v" \
+"hdl/ddc_oct.v" \
 ]
 
 set_property "top" "axi_ddc_oct" $proj_fileset
@@ -168,9 +168,9 @@ ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/c_accum_oct/c_accum_oct.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
 
 # Reordering
-ipx::reorder_files -after ./axi_ddc_oct.srcs/sources_1/ip/c_accum_oct/c_accum_oct.xci ../axi_ddc_oct.v [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::reorder_files -after ../ddc_oct.v ../axi_ddc_oct_core.v [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
+#ipx::reorder_files -after ./axi_ddc_oct.srcs/sources_1/ip/c_accum_oct/c_accum_oct.xci ./hdl/axi_ddc_oct.v [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
+#ipx::reorder_files -after ./hdl/ddc_oct.v ./hdl/axi_ddc_oct_core.v [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
 
 # Interface
-ipx::infer_bus_interface dev_clk xilinx.com:signal:clock_rtl:1.0 [ipx::current_core]
+ipx::infer_bus_interface s_axis_aclk xilinx.com:signal:clock_rtl:1.0 [ipx::current_core]
 ipx::save_core [ipx::current_core]

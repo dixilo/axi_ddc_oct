@@ -193,8 +193,8 @@ module axi_ddc_oct #
         if (pvalid_dev) begin
             pinc_buff[ch_buff_axi] <= pinc_buff_axi;
             poff_buff[ch_buff_axi] <= poff_buff_axi;
-        else begin
-            ;
+        end else begin
+
         end
     end    
 
@@ -314,9 +314,9 @@ module axi_ddc_oct #
 
     // dds_buf[0] to dds_buf[N-1] stores raw output from ddc cores
     integer s;
-    for (s=0; s < N_CH; s = s+1) begin
-        dds_buf_i[s] <= m_axis_ddsi_tdata[s];
-        dds_buf_q[s] <= m_axis_ddsq_tdata[s];
+    for (s=0;s<N_CH;s=s+1) begin:dds_buffering
+        assign dds_buf_i[s] = ddsi_out[s];
+        assign dds_buf_q[s] = ddsq_out[s];
     end
 
     // l=0: dds_buf[0] = dds_buf[1] + dds_buf[2]
@@ -327,7 +327,7 @@ module axi_ddc_oct #
     genvar l, m, n;
     generate
         for(l=0;l<N_CH_WIDTH;l=l+1) begin:kaisen
-            for(m=0;m<2**l);m=m+1) begin:siai
+            for(m=0;m<(2**l);m=m+1) begin:siai
                 for(n=0;n<8;n=n+1) begin:lane
                     adder_dds adder_ddsi_inst(
                         .clk(s_axis_aclk),

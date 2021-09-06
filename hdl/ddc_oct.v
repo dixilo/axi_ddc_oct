@@ -47,6 +47,8 @@ module ddc_oct(
     assign m_axis_ddsi_tvalid = valid_out_dds; 
     assign m_axis_ddsq_tvalid = valid_out_dds;
 
+    wire s_axis_tvalid = s_axis_i_tvalid & s_axis_q_tvalid;
+
     // always ready
     assign s_axis_i_tready = 1'b1;
     assign s_axis_q_tready = 1'b1;
@@ -94,7 +96,7 @@ module ddc_oct(
     wire [27:0] i_67;
     wire [28:0] i_0123;
     wire [28:0] i_4567;
-    wire [29:0] i_tot
+    wire [29:0] i_tot;
 
     wire [27:0] q_01;
     wire [27:0] q_23;
@@ -102,7 +104,7 @@ module ddc_oct(
     wire [27:0] q_67;
     wire [28:0] q_0123;
     wire [28:0] q_4567;
-    wire [29:0] q_tot
+    wire [29:0] q_tot;
 
 
     /////////////////////////////////////////////////////////// Phase configuration
@@ -197,7 +199,7 @@ module ddc_oct(
         .s_axis_tready(s_axis_tready),
         .s_axis_phase_tdata({poff_0, pinc_x8}),
         .s_axis_phase_tvalid(valid_in_dds),
-        .resync(resync_dds)
+        .resync(resync_dds),
         .m_axis_dds_tdata({m_axis_ddsq_tdata[15:0], m_axis_ddsi_tdata[15:0]}),
         .m_axis_dds_tvalid(valid_out_dds),
         .m_axis_ddc_tdata(ddc_out_0),
@@ -211,7 +213,7 @@ module ddc_oct(
         .s_axis_tready(s_axis_tready),
         .s_axis_phase_tdata({poff_1, pinc_x8}),
         .s_axis_phase_tvalid(valid_in_dds),
-        .resync(resync_dds)
+        .resync(resync_dds),
         .m_axis_dds_tdata({m_axis_ddsq_tdata[31:16], m_axis_ddsi_tdata[31:16]}),
         .m_axis_ddc_tdata(ddc_out_1)
     );
@@ -223,7 +225,7 @@ module ddc_oct(
         .s_axis_tready(s_axis_tready),
         .s_axis_phase_tdata({poff_2, pinc_x8}),
         .s_axis_phase_tvalid(valid_in_dds),
-        .resync(resync_dds)
+        .resync(resync_dds),
         .m_axis_dds_tdata({m_axis_ddsq_tdata[47:32], m_axis_ddsi_tdata[47:32]}),
         .m_axis_ddc_tdata(ddc_out_2)
     );
@@ -235,7 +237,7 @@ module ddc_oct(
         .s_axis_tready(s_axis_tready),
         .s_axis_phase_tdata({poff_3, pinc_x8}),
         .s_axis_phase_tvalid(valid_in_dds),
-        .resync(resync_dds)
+        .resync(resync_dds),
         .m_axis_dds_tdata({m_axis_ddsq_tdata[63:48], m_axis_ddsi_tdata[63:48]}),
         .m_axis_ddc_tdata(ddc_out_3)
     );
@@ -247,7 +249,7 @@ module ddc_oct(
         .s_axis_tready(s_axis_tready),
         .s_axis_phase_tdata({poff_4, pinc_x8}),
         .s_axis_phase_tvalid(valid_in_dds),
-        .resync(resync_dds)
+        .resync(resync_dds),
         .m_axis_dds_tdata({m_axis_ddsq_tdata[79:64], m_axis_ddsi_tdata[79:64]}),
         .m_axis_ddc_tdata(ddc_out_4)
     );
@@ -259,7 +261,7 @@ module ddc_oct(
         .s_axis_tready(s_axis_tready),
         .s_axis_phase_tdata({poff_5, pinc_x8}),
         .s_axis_phase_tvalid(valid_in_dds),
-        .resync(resync_dds)
+        .resync(resync_dds),
         .m_axis_dds_tdata({m_axis_ddsq_tdata[95:80], m_axis_ddsi_tdata[95:80]}),
         .m_axis_ddc_tdata(ddc_out_5)
     );
@@ -271,7 +273,7 @@ module ddc_oct(
         .s_axis_tready(s_axis_tready),
         .s_axis_phase_tdata({poff_6, pinc_x8}),
         .s_axis_phase_tvalid(valid_in_dds),
-        .resync(resync_dds)
+        .resync(resync_dds),
         .m_axis_dds_tdata({m_axis_ddsq_tdata[111:96], m_axis_ddsi_tdata[111:96]}),
         .m_axis_ddc_tdata(ddc_out_6)
     );
@@ -283,7 +285,7 @@ module ddc_oct(
         .s_axis_tready(s_axis_tready),
         .s_axis_phase_tdata({poff_7, pinc_x8}),
         .s_axis_phase_tvalid(valid_in_dds),
-        .resync(resync_dds)
+        .resync(resync_dds),
         .m_axis_dds_tdata({m_axis_ddsq_tdata[127:112], m_axis_ddsi_tdata[127:112]}),
         .m_axis_ddc_tdata(ddc_out_7)
     );
@@ -382,7 +384,7 @@ module ddc_oct(
         .s(i_tot)
     );
 
-    adder_3rd_oct add_i_tot(
+    adder_3rd_oct add_q_tot(
         .clk(s_axis_aclk),
         .a(q_0123),
         .b(q_4567),
