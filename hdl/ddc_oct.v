@@ -111,7 +111,7 @@ module ddc_oct(
     always @(posedge s_axis_aclk) begin
         if (s_axis_phase_tvalid) begin
             pinc_buf <= s_axis_phase_tdata[31:0];
-            poff_buf <= s_axis_phase_tdata[63:0];
+            poff_buf <= s_axis_phase_tdata[63:32];
         end
     end
 

@@ -4,7 +4,7 @@
 import axi_vip_pkg::*;
 import system_axi_vip_0_pkg::*;
 
-module sim_full(
+module loopback(
 
     );
 
@@ -48,10 +48,6 @@ module sim_full(
 
     system_wrapper dut(.*);
 
-    // Utility
-    integer fd_din_i;
-    integer fd_din_q;
-
     integer fd_dout;
     logic write_ready = 0;
     logic [$clog2(SIM_LENGTH)-1:0] counter = 0;
@@ -59,10 +55,6 @@ module sim_full(
 
     // read setting
     integer fd_p;
-
-    // data flow control
-    logic din_on;
-    logic din_fin;
 
     wire [15:0] dds_i0 = m_axis_ddsi_tdata[15:0];
     wire [15:0] dds_i1 = m_axis_ddsi_tdata[31:16];
@@ -82,6 +74,11 @@ module sim_full(
     wire [15:0] dds_q6 = m_axis_ddsq_tdata[111:96];
     wire [15:0] dds_q7 = m_axis_ddsq_tdata[127:112];
 
+    for(genvar l=0; l<8; l++) begin
+        assign s_axis_i_tdata[16*(l+1)-1:16*l] = {{4{m_axis_ddsi_tdata[16*l+13]}}, m_axis_ddsi_tdata[16*l+13:16*l+2]};
+        assign s_axis_q_tdata[16*(l+1)-1:16*l] = {{4{m_axis_ddsq_tdata[16*l+13]}}, m_axis_ddsq_tdata[16*l+13:16*l+2]};
+    end
+
     system_axi_vip_0_mst_t  vip_agent;
 
 
@@ -98,7 +95,6 @@ module sim_full(
     task rst_gen();
         axi_aresetn = 0;
         s_axis_aresetn = 0;
-        s_axis_i_tdata = 0;
         s_axis_q_tdata = 0;
         s_axis_i_tvalid = 0;
         s_axis_q_tvalid = 0;
@@ -107,8 +103,6 @@ module sim_full(
         m_axis_ddsq_tready = 1;
         m_axis_ddc_tready = 1;
 
-        din_on = 0;
-        din_fin = 0;
         resync = 0;
 
         #(STEP_SYS*10);
@@ -117,12 +111,9 @@ module sim_full(
     endtask
     
     task file_open();
-        fd_din_i = $fopen("./data_in_i.bin", "r");
-        fd_din_q = $fopen("./data_in_q.bin", "r");
-
         fd_dout = $fopen("./data_out.bin", "w");
 
-        if ((fd_din_q == 0) | (fd_dout == 0)) begin
+        if (fd_dout == 0) begin
             $display("File open error.");
             $finish;
         end else begin
@@ -163,7 +154,7 @@ module sim_full(
         
         #(STEP_SYS*500);
     
-        vip_agent = new("my VIP master", sim_full.dut.system_i.axi_vip.inst.IF);
+        vip_agent = new("my VIP master", loopback.dut.system_i.axi_vip.inst.IF);
         vip_agent.start_master();
         #(STEP_SYS*100);
         wr_transaction = vip_agent.wr_driver.create_transaction("write transaction");
@@ -203,7 +194,8 @@ module sim_full(
         @(posedge s_axis_aclk);
         resync <= 0;
         repeat(50)@(posedge s_axis_aclk);
-        din_on <= 1;
+        s_axis_i_tvalid <= 1'b1;
+        s_axis_q_tvalid <= 1'b1;
 
         wait(finish);
 
@@ -213,34 +205,16 @@ module sim_full(
     end
 
     always @(posedge s_axis_aclk) begin
-        if (m_axis_ddc_tvalid && din_on && write_ready) begin
+        if (m_axis_ddc_tvalid && write_ready) begin
             if (~finish) begin
                 $fdisplay(fd_dout, "%b", m_axis_ddc_tdata);
-                if (counter == (4*SIM_LENGTH/DS_RATE - 1)) begin
+                if (counter == (8*SIM_LENGTH/DS_RATE - 1)) begin
                     finish <= 1;
                     $fclose(fd_dout);
                 end else begin
                     counter <= counter + 1;
                 end
             end
-        end
-    end
-
-    always @(posedge s_axis_aclk) begin
-        if (din_on & ~din_fin) begin
-            if($feof(fd_din_q) != 0) begin
-                s_axis_i_tvalid <= 1'b0;
-                s_axis_q_tvalid <= 1'b0;
-
-                $display("DIN fin");
-                $fclose(fd_din_i);
-                $fclose(fd_din_q);
-                din_fin <= 1'b1;
-            end
-            $fscanf(fd_din_i, "%b\n", s_axis_i_tdata);
-            $fscanf(fd_din_q, "%b\n", s_axis_q_tdata);
-            s_axis_i_tvalid <= 1'b1;
-            s_axis_q_tvalid <= 1'b1;
         end
     end
 

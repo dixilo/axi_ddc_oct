@@ -154,7 +154,7 @@ ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/multiplier_oct/multiplier_oct.xci 
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
 ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_oct/adder_oct.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
-ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/subtracter_oct/subtracter_oct.xci \
+ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/subtractor_oct/subtractor_oct.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
 ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_phase_oct/adder_phase_oct.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
@@ -165,6 +165,8 @@ ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_2nd_oct/adder_2nd_oct.xci \
 ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_3rd_oct/adder_3rd_oct.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
 ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/c_accum_oct/c_accum_oct.xci \
+[ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
+ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_dds/adder_dds.xci \
 [ipx::get_file_groups xilinx_anylanguagesynthesis -of_objects [ipx::current_core]]
 
 # Reordering

@@ -70,7 +70,7 @@ module axi_ddc_oct #
 
     axi_ddc_oct_core # ( 
         .C_S_AXI_DATA_WIDTH(C_S00_AXI_DATA_WIDTH),
-        .C_S_AXI_ADDR_WIDTH(C_S00_AXI_ADDR_WIDTH),
+        .C_S_AXI_ADDR_WIDTH(C_S00_AXI_ADDR_WIDTH)
     ) axi_ddc_oct_core_inst (
         .S_AXI_ACLK(s00_axi_aclk),
         .S_AXI_ARESETN(s00_axi_aresetn),
@@ -112,6 +112,12 @@ module axi_ddc_oct #
 
     localparam PINC_WIDTH = 32;
     localparam POFF_WIDTH = 32;
+
+    localparam DDS_RESOLUTION = 14;
+    localparam DDS_ADDER_WIDTH = 16;
+    localparam DDS_MARGIN = DDS_ADDER_WIDTH - DDS_RESOLUTION;
+
+    localparam DDS_LATENCY = 3*N_CH_WIDTH;
 
     wire [DDC_WIDTH*2-1:0] ddc_out [0:N_CH-1];
     wire [DDS_WIDTH-1:0]   ddsi_out [0:N_CH-1];
@@ -224,7 +230,7 @@ module axi_ddc_oct #
                 .s_axis_q_tdata(s_axis_q_tdata),
                 .s_axis_q_tready(s_axis_q_tready),
                 .s_axis_q_tvalid(s_axis_q_tvalid),
-                .s_axis_phase_tdata({poff_buf[i], pinc_buff[i]}),
+                .s_axis_phase_tdata({poff_buff[i], pinc_buff[i]}),
                 .s_axis_phase_tvalid(1'b1),
                 .resync(resync | resync_soft),
 
@@ -242,7 +248,7 @@ module axi_ddc_oct #
 
             accumulator accum_inst_i(
                 .clk(s_axis_aclk),
-                .rst(s_axis_aresetn),
+                .rst(~s_axis_aresetn),
                 .valid_in(valid_ddc[i]),
                 .length(acc_len),
                 .data_in(ddc_out[i][DDC_WIDTH-1:0]),
@@ -251,8 +257,8 @@ module axi_ddc_oct #
             );
 
             accumulator accum_inst_q(
-                .clk(dev_clk),
-                .rst(dev_rst),
+                .clk(s_axis_aclk),
+                .rst(~s_axis_aresetn),
                 .valid_in(valid_ddc[i]),
                 .length(acc_len),
                 .data_in(ddc_out[i][32+DDC_WIDTH-1:32]),
@@ -311,13 +317,8 @@ module axi_ddc_oct #
     //////////////////////////////////////////////////////// DDS adder
     wire [DDS_WIDTH-1:0] dds_buf_i [0:2*N_CH_C-2];
     wire [DDS_WIDTH-1:0] dds_buf_q [0:2*N_CH_C-2];
-
-    // dds_buf[0] to dds_buf[N-1] stores raw output from ddc cores
-    integer s;
-    for (s=0;s<N_CH;s=s+1) begin:dds_buffering
-        assign dds_buf_i[s] = ddsi_out[s];
-        assign dds_buf_q[s] = ddsq_out[s];
-    end
+    wire [DDS_WIDTH-1:0] dds_buf_i_out [0:2*N_CH_C-2];
+    wire [DDS_WIDTH-1:0] dds_buf_q_out [0:2*N_CH_C-2];
 
     // l=0: dds_buf[0] = dds_buf[1] + dds_buf[2]
     // l=1: dds_buf[1] = dds_buf[3] + dds_buf[4], dds_buf[2] = dds_buf[5] + dds_buf[6]
@@ -325,31 +326,57 @@ module axi_ddc_oct #
     // l=3: dds_buf[7] = ...
 
     genvar l, m, n;
+    
     generate
         for(l=0;l<N_CH_WIDTH;l=l+1) begin:kaisen
             for(m=0;m<(2**l);m=m+1) begin:siai
                 for(n=0;n<8;n=n+1) begin:lane
                     adder_dds adder_ddsi_inst(
                         .clk(s_axis_aclk),
-                        .a( dds_buf_i[2**(l+1) - 1 + 2*m    ][16*(n+1)-1:16*n]),
-                        .b( dds_buf_i[2**(l+1) - 1 + 2*m + 1][16*(n+1)-1:16*n]),
-                        .s({dds_buf_i[2**l     - 1 +   m    ][16*(n+1)-2:16*n], z})
+                        .a(dds_buf_i[2**(l+1) - 1 + 2*m    ][16*(n+1)-1:16*n]),
+                        .b(dds_buf_i[2**(l+1) - 1 + 2*m + 1][16*(n+1)-1:16*n]),
+                        .s(dds_buf_i_out[2**l - 1 +   m    ][16*(n+1)-1:16*n])
                     );
+                    // Divide by 2
+                    assign dds_buf_i[2**l- 1+m][16*(n+1)-2:16*n] = dds_buf_i_out[2**l- 1+m][16*(n+1)-1:16*n+1];
+                    assign dds_buf_i[2**l- 1+m][16*(n+1)-1]      = dds_buf_i_out[2**l- 1+m][16*(n+1)-1];
+
                     adder_dds adder_ddsq_inst(
                         .clk(s_axis_aclk),
-                        .a( dds_buf_q[2**(l+1) - 1 + 2*m    ][16*(n+1)-1:16*n]),
-                        .b( dds_buf_q[2**(l+1) - 1 + 2*m + 1][16*(n+1)-1:16*n]),
-                        .s({dds_buf_q[2**l     - 1 +   m    ][16*(n+1)-2:16*n], z})
+                        .a(dds_buf_q[2**(l+1) - 1 + 2*m    ][16*(n+1)-1:16*n]),
+                        .b(dds_buf_q[2**(l+1) - 1 + 2*m + 1][16*(n+1)-1:16*n]),
+                        .s(dds_buf_q_out[2**l - 1 +   m    ][16*(n+1)-1:16*n])
                     );
+                    // Divide by 2
+                    assign dds_buf_q[2**l- 1+m][16*(n+1)-2:16*n] = dds_buf_q_out[2**l- 1+m][16*(n+1)-1:16*n+1];
+                    assign dds_buf_q[2**l- 1+m][16*(n+1)-1]      = dds_buf_q_out[2**l- 1+m][16*(n+1)-1];
                 end
             end
         end
     endgenerate
 
-    integer p;
+    genvar p, q;
     for(p=0;p<N_CH;p=p+1) begin:first
-        assign dds_buf_i[N_CH_C + p][DDS_WIDTH-1:0] = ddsi_out[p];
-        assign dds_buf_q[N_CH_C + p][DDS_WIDTH-1:0] = ddsq_out[p];
+        for(q=0;q<8;q=q+1) begin:first_lane
+            assign dds_buf_i[N_CH_C + p - 1][16*(q+1)-1:16*q] = {ddsi_out[p][16*(q+1)-DDS_MARGIN:16*q], {(DDS_MARGIN-1){1'b0}}};
+            assign dds_buf_q[N_CH_C + p - 1][16*(q+1)-1:16*q] = {ddsq_out[p][16*(q+1)-DDS_MARGIN:16*q], {(DDS_MARGIN-1){1'b0}}};
+        end
     end
+
+    genvar r;
+    for(r=0;r<8;r=r+1) begin:last
+        assign m_axis_ddsi_tdata[16*(r+1)-1:16*r] = {{(DDS_MARGIN){dds_buf_i[0][16*(r+1)-2]}}, dds_buf_i[0][16*(r+1)-2:16*r+DDS_MARGIN-1]};
+        assign m_axis_ddsq_tdata[16*(r+1)-1:16*r] = {{(DDS_MARGIN){dds_buf_q[0][16*(r+1)-2]}}, dds_buf_q[0][16*(r+1)-2:16*r+DDS_MARGIN-1]};
+    end
+
+
+    // DDS valid
+    reg [DDS_LATENCY-1:0] dds_valid_buff;
+    always @(posedge s_axis_aclk) begin
+        dds_valid_buff <= {dds_valid_buff[DDS_LATENCY-2:0], valid_dds[0]};
+    end
+
+    assign m_axis_ddsi_tvalid = dds_valid_buff[DDS_LATENCY-1];
+    assign m_axis_ddsq_tvalid = dds_valid_buff[DDS_LATENCY-1];
 
 endmodule

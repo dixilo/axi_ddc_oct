@@ -5,7 +5,7 @@ source ../util.tcl
 set p_device "xcku040-ffva1156-2-e"
 set p_board "xilinx.com:kcu105:part0:1.7"
 
-set project_name "axi_bench"
+set project_name "loopback"
 
 create_project -force $project_name ./${project_name} -part $p_device
 set_property board_part $p_board [current_project]
@@ -124,8 +124,8 @@ import_files -force -norecurse -fileset sources_1 $project_system_dir/hdl/system
 set_property top system_wrapper [current_fileset]
 
 ### Simulation
-add_files -fileset sim_1 -norecurse ./sim_full.sv
-set_property top sim_full [get_filesets sim_1]
+add_files -fileset sim_1 -norecurse ./loopback.sv
+set_property top loopback [get_filesets sim_1]
 
 
 # Run
