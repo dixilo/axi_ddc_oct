@@ -176,3 +176,11 @@ ipx::add_file ./axi_ddc_oct.srcs/sources_1/ip/adder_dds/adder_dds.xci \
 # Interface
 ipx::infer_bus_interface s_axis_aclk xilinx.com:signal:clock_rtl:1.0 [ipx::current_core]
 ipx::save_core [ipx::current_core]
+
+ipx::associate_bus_interfaces -busif s_axis_i -clock s_axis_aclk [ipx::current_core]
+ipx::associate_bus_interfaces -busif s_axis_q -clock s_axis_aclk [ipx::current_core]
+ipx::associate_bus_interfaces -busif m_axis_ddc -clock s_axis_aclk [ipx::current_core]
+ipx::associate_bus_interfaces -busif m_axis_ddsi -clock s_axis_aclk [ipx::current_core]
+ipx::associate_bus_interfaces -busif m_axis_ddsq -clock s_axis_aclk [ipx::current_core]
+
+ipx::save_core [ipx::current_core]

@@ -218,16 +218,38 @@ module axi_ddc_oct #
     end
     wire resync_soft = (resync_soft_buf == 2'b01);
 
+    // bit reordering; ADC output is MSB aligned
+    wire [127:0] s_axis_i_tdata_mod;
+    wire [127:0] s_axis_q_tdata_mod;
+
+    assign s_axis_i_tdata_mod[ 15:  0] = {{4{s_axis_i_tdata[ 15]}}, s_axis_i_tdata[ 15:  4]};
+    assign s_axis_i_tdata_mod[ 31: 16] = {{4{s_axis_i_tdata[ 31]}}, s_axis_i_tdata[ 31: 20]};
+    assign s_axis_i_tdata_mod[ 47: 32] = {{4{s_axis_i_tdata[ 47]}}, s_axis_i_tdata[ 47: 36]};
+    assign s_axis_i_tdata_mod[ 63: 48] = {{4{s_axis_i_tdata[ 63]}}, s_axis_i_tdata[ 63: 52]};
+    assign s_axis_i_tdata_mod[ 79: 64] = {{4{s_axis_i_tdata[ 79]}}, s_axis_i_tdata[ 79: 68]};
+    assign s_axis_i_tdata_mod[ 95: 80] = {{4{s_axis_i_tdata[ 95]}}, s_axis_i_tdata[ 95: 84]};
+    assign s_axis_i_tdata_mod[111: 96] = {{4{s_axis_i_tdata[111]}}, s_axis_i_tdata[111:100]};
+    assign s_axis_i_tdata_mod[127:112] = {{4{s_axis_i_tdata[127]}}, s_axis_i_tdata[127:116]};
+
+    assign s_axis_q_tdata_mod[ 15:  0] = {{4{s_axis_q_tdata[ 15]}}, s_axis_q_tdata[ 15:  4]};
+    assign s_axis_q_tdata_mod[ 31: 16] = {{4{s_axis_q_tdata[ 31]}}, s_axis_q_tdata[ 31: 20]};
+    assign s_axis_q_tdata_mod[ 47: 32] = {{4{s_axis_q_tdata[ 47]}}, s_axis_q_tdata[ 47: 36]};
+    assign s_axis_q_tdata_mod[ 63: 48] = {{4{s_axis_q_tdata[ 63]}}, s_axis_q_tdata[ 63: 52]};
+    assign s_axis_q_tdata_mod[ 79: 64] = {{4{s_axis_q_tdata[ 79]}}, s_axis_q_tdata[ 79: 68]};
+    assign s_axis_q_tdata_mod[ 95: 80] = {{4{s_axis_q_tdata[ 95]}}, s_axis_q_tdata[ 95: 84]};
+    assign s_axis_q_tdata_mod[111: 96] = {{4{s_axis_q_tdata[111]}}, s_axis_q_tdata[111:100]};
+    assign s_axis_q_tdata_mod[127:112] = {{4{s_axis_q_tdata[127]}}, s_axis_q_tdata[127:116]};
+
     // Module generation
     genvar i;
     generate
         for(i=0;i<N_CH;i=i+1) begin:ddc_accm
             ddc_oct ddc_oct_inst(
                 .s_axis_aclk(s_axis_aclk),
-                .s_axis_i_tdata(s_axis_i_tdata),
+                .s_axis_i_tdata(s_axis_i_tdata_mod),
                 .s_axis_i_tready(s_axis_i_tready),
                 .s_axis_i_tvalid(s_axis_i_tvalid),
-                .s_axis_q_tdata(s_axis_q_tdata),
+                .s_axis_q_tdata(s_axis_q_tdata_mod),
                 .s_axis_q_tready(s_axis_q_tready),
                 .s_axis_q_tvalid(s_axis_q_tvalid),
                 .s_axis_phase_tdata({poff_buff[i], pinc_buff[i]}),
@@ -365,10 +387,9 @@ module axi_ddc_oct #
 
     genvar r;
     for(r=0;r<8;r=r+1) begin:last
-        assign m_axis_ddsi_tdata[16*(r+1)-1:16*r] = {{(DDS_MARGIN){dds_buf_i[0][16*(r+1)-2]}}, dds_buf_i[0][16*(r+1)-2:16*r+DDS_MARGIN-1]};
-        assign m_axis_ddsq_tdata[16*(r+1)-1:16*r] = {{(DDS_MARGIN){dds_buf_q[0][16*(r+1)-2]}}, dds_buf_q[0][16*(r+1)-2:16*r+DDS_MARGIN-1]};
+        assign m_axis_ddsi_tdata[16*(r+1)-1:16*r] = {dds_buf_i[0][16*(r+1)-2:16*r+DDS_MARGIN-1], {(DDS_MARGIN){1'b0}}};
+        assign m_axis_ddsq_tdata[16*(r+1)-1:16*r] = {dds_buf_q[0][16*(r+1)-2:16*r+DDS_MARGIN-1], {(DDS_MARGIN){1'b0}}};
     end
-
 
     // DDS valid
     reg [DDS_LATENCY-1:0] dds_valid_buff;
