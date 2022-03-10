@@ -67,6 +67,7 @@ module axi_ddc_oct #
     wire        pvalid_axi;
     wire [31:0] rate_axi;
     wire        resync_soft_axi;
+    wire        ddc_gate;
 
     axi_ddc_oct_core # ( 
         .C_S_AXI_DATA_WIDTH(C_S00_AXI_DATA_WIDTH),
@@ -97,6 +98,7 @@ module axi_ddc_oct #
         .pinc(pinc_axi),
         .poff(poff_axi),
         .pvalid(pvalid_axi),
+        .ddc_gate(ddc_gate),
         .rate(rate_axi),
         .resync_soft(resync_soft_axi)
     );
@@ -137,8 +139,16 @@ module axi_ddc_oct #
     // Configuration information such as ch and pinc/poff is clocked by S_AXI
     // while ddc_oct is synchronized to the data converter.
     reg [31:0]           pinc_buff_axi;
+    reg [31:0]           pinc_buff_dev_0;
+    reg [31:0]           pinc_buff_dev_1;
+
     reg [31:0]           poff_buff_axi;
+    reg [31:0]           poff_buff_dev_0;
+    reg [31:0]           poff_buff_dev_1;
+
     reg [N_CH_WIDTH-1:0] ch_buff_axi;
+    reg [N_CH_WIDTH-1:0] ch_buff_dev_0;
+    reg [N_CH_WIDTH-1:0] ch_buff_dev_1;
 
     always @(posedge s00_axi_aclk) begin
         if (pvalid_axi) begin
@@ -152,44 +162,89 @@ module axi_ddc_oct #
         end
     end
 
-    // handshake signal
-    reg reconf;     // driven by AXI.
-    reg reconf_fin; // driven by data converter.
-    reg reconf_fin_buf;
+    always @(posedge s_axis_aclk) begin
+        pinc_buff_dev_0 <= pinc_buff_axi;
+        pinc_buff_dev_1 <= pinc_buff_dev_0;
 
+        poff_buff_dev_0 <= poff_buff_axi;
+        poff_buff_dev_1 <= poff_buff_dev_0;
+
+        ch_buff_dev_0 <= ch_buff_axi;
+        ch_buff_dev_1 <= ch_buff_dev_0;
+    end
+
+
+    // handshake signal
+    reg reconf_axi;         // driven by AXI.
+    reg reconf_dev_0;       // driven by data converter, metastable
+    reg reconf_dev_1;       // driven by data converter, stable
+
+    reg reconf_fin_dev;     // driven by data converter.
+    reg reconf_fin_dev_buf; // driven by data converter, buffer.
+    reg reconf_fin_axi_0;   // driven by AXI, metastable.
+    reg reconf_fin_axi_1;   // driven by AXI, stable
+
+    // reconf_axi
     always @(posedge s00_axi_aclk) begin
         if (s00_axi_aresetn == 1'b0) begin
-            reconf <= 1'b0;
+            reconf_axi <= 1'b0;
         end else begin
             if (pvalid_axi) begin
-                reconf <= 1'b1;
-            end else if (reconf_fin) begin
-                reconf <= 1'b0;
+                reconf_axi <= 1'b1;
+            end else if (reconf_fin_axi_1) begin
+                reconf_axi <= 1'b0;
             end else begin
-                reconf <= reconf;
+                reconf_axi <= reconf_axi;
             end
         end
     end
 
+    // reconf_dev_0, reconf_dev_1
     always @(posedge s_axis_aclk) begin
         if (s_axis_aresetn == 1'b0) begin
-            reconf_fin <= 1'b0;
+            reconf_dev_0 <= 1'b0;
+            reconf_dev_1 <= 1'b0;
         end else begin
-            if (reconf) begin
-                reconf_fin <= 1'b1;
+            reconf_dev_0 <= reconf_axi;
+            reconf_dev_1 <= reconf_dev_0;
+        end
+    end
+
+    // reconf_fin_dev
+    always @(posedge s_axis_aclk) begin
+        if (s_axis_aresetn == 1'b0) begin
+            reconf_fin_dev <= 1'b0;
+        end else begin
+            if (reconf_dev_1) begin
+                reconf_fin_dev <= 1'b1;
             end else begin
-                reconf_fin <= 1'b0;
+                reconf_fin_dev <= 1'b0;
             end
         end
     end
 
-    // pinc/poff configuration
+    // reconf_fin_dev_buf
     always @(posedge s_axis_aclk) begin
-        reconf_fin_buf <= reconf_fin;
+        if (s_axis_aresetn == 1'b0) begin
+            reconf_fin_dev_buf <= 1'b0;
+        end else begin
+            reconf_fin_dev_buf <= reconf_fin_dev;
+        end
+    end
+
+    // reconf_fin_axi_0, reconf_fin_axi_1
+    always @(posedge s00_axi_aclk) begin
+        if (s00_axi_aresetn == 1'b0) begin
+            reconf_fin_axi_0 <= 1'b0;
+            reconf_fin_axi_1 <= 1'b0;
+        end else begin
+            reconf_fin_axi_0 <= reconf_fin_dev;
+            reconf_fin_axi_1 <= reconf_fin_axi_0;
+        end
     end
 
     // First 1 cycle of reconf_fin
-    wire pvalid_dev = (reconf_fin == 1'b1) & (reconf_fin_buf == 1'b0);
+    wire pvalid_dev = (reconf_fin_dev == 1'b1) & (reconf_fin_dev_buf == 1'b0);
 
     reg [PINC_WIDTH-1:0] pinc_buff [0:N_CH-1];
     reg [POFF_WIDTH-1:0] poff_buff [0:N_CH-1];
@@ -197,10 +252,10 @@ module axi_ddc_oct #
     // pinc/poff registration
     always @(posedge s_axis_aclk) begin
         if (pvalid_dev) begin
-            pinc_buff[ch_buff_axi] <= pinc_buff_axi;
-            poff_buff[ch_buff_axi] <= poff_buff_axi;
+            pinc_buff[ch_buff_dev_1] <= pinc_buff_dev_1;
+            poff_buff[ch_buff_dev_1] <= poff_buff_dev_1;
         end else begin
-
+            
         end
     end    
 
@@ -333,7 +388,7 @@ module axi_ddc_oct #
         valid_pipe_buf <= valid_seq;
     end
 
-    assign m_axis_ddc_tvalid = valid_pipe_buf;
+    assign m_axis_ddc_tvalid = valid_pipe_buf & ddc_gate;
 
 
     //////////////////////////////////////////////////////// DDS adder

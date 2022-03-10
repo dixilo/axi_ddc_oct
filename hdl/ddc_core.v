@@ -25,7 +25,7 @@ module ddc_core(
     localparam DDS_RES = 14;
     localparam ADC_RES = 12;
     localparam MUL_RES = 26;
-    localparam DDC_PAD = 32 - MUL_RES;
+    localparam DDC_PAD = 32 - MUL_RES - 1;
     localparam DDS_PAD = 16 - DDS_RES;
 
     localparam DDC_LATENCY = 6;

@@ -36,6 +36,7 @@ module axi_ddc_oct_core #
     output wire [31:0] pinc,
     output wire [31:0] poff,
     output wire        pvalid,
+    output wire        ddc_gate,
 
     // accumulation length
     output wire [31:0] rate,
@@ -65,7 +66,7 @@ module axi_ddc_oct_core #
     reg [C_S_AXI_DATA_WIDTH-1:0]    slv_reg2; // poff
     reg [C_S_AXI_DATA_WIDTH-1:0]    slv_reg3; // rate
 
-    reg [C_S_AXI_DATA_WIDTH-1:0]    slv_reg5;
+    reg [C_S_AXI_DATA_WIDTH-1:0]    slv_reg5; // ddc_gate
     reg [C_S_AXI_DATA_WIDTH-1:0]    slv_reg6;
     reg [C_S_AXI_DATA_WIDTH-1:0]    slv_reg7;
     wire                            slv_reg_rden;
@@ -141,7 +142,7 @@ module axi_ddc_oct_core #
             slv_reg1 <= 0;
             slv_reg2 <= 0;
             slv_reg3 <= 0;
-            slv_reg5 <= 0;
+            slv_reg5 <= 1;
             slv_reg6 <= 0;
             slv_reg7 <= 0;
         end else begin
@@ -275,17 +276,25 @@ module axi_ddc_oct_core #
     assign pinc = slv_reg1;
     assign poff = slv_reg2;
     assign rate = slv_reg3;
+    assign ddc_gate = slv_reg5[0];
 
     // Publish pvalid at write strobe to reg0 (channel register).
     // Users will write pinc (reg1) and poff (reg2) then ch (reg0).
     wire ch_selected = axi_awaddr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB] == 0;
     wire wstrb = | S_AXI_WSTRB;
-    assign pvalid = ch_selected & wstrb;
+    wire pvalid_pre = ch_selected & wstrb & slv_reg_wren;
+    reg pvalid_buf;
+
+    always @(posedge S_AXI_ACLK) begin
+        pvalid_buf <= pvalid_pre;
+    end
+
+    assign pvalid = pvalid_buf;
 
     // Writing 1 to 0th bit at the 0x10 publish resync.
     wire resync_selected = axi_awaddr[ADDR_LSB+OPT_MEM_ADDR_BITS:ADDR_LSB] == 4;
     wire wstrb_0 = S_AXI_WSTRB[0];
     wire wdata_0 = S_AXI_WDATA[0];
-    assign resync_soft = resync_selected & wstrb_0 & wdata_0;
+    assign resync_soft = resync_selected & wstrb_0 & wdata_0 & slv_reg_wren;
 
 endmodule
